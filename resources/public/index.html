@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-slate-950">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>httpad</title>
+  <link rel="manifest" href="/manifest.json">
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+  <!-- Standalone Tailwind stylesheet (No Node, no npm, no extra build tasks) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Minimalist touch tweaks */
+    html, body {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+      overscroll-behavior: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 overflow-hidden select-none">
+  <div id="app"></div>
+  <script src="/js/main.js"></script>
+</body>
+</html>
