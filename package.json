@@ -1,0 +1,13 @@
+{
+  "name": "httpad",
+  "version": "0.1.0-SNAPSHOT",
+  "private": true,
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@cljs-oss/module-deps": "^1.1.1",
+    "shadow-cljs": "^3.4.12"
+  }
+}
