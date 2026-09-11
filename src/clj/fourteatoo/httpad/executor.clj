@@ -23,7 +23,7 @@
   (or (get-in config (concat [:action-index] action-path [:default]))
       (get-in config (concat [:action-index] action-path))))
 
-(defn execute!
+(defn execute
   "Executes a button command asynchronously behind a rate limiter.
    Default cooldown is 500ms per action-id."
   ([action-id]
@@ -31,12 +31,12 @@
   ([action-id cooldown-ms]
    (if (rate-limited? action-id cooldown-ms)
      (log/warnf "Rate limit hit for action '%s'. Dropping execution." action-id)
-     (if-let [cmd-vec (lookup-command action-id)]
+     (if-let [cmd (lookup-command action-id)]
        ;; Future handles non-blocking execution off the http-kit worker thread
        (future
          (try
-           (log/infof "Executing command for %s: %s" action-id cmd-vec)
-           (let [{:keys [exit out err]} (apply sh cmd-vec)]
+           (log/infof "Executing command for %s: %s" action-id cmd)
+           (let [{:keys [exit out err]} (sh "sh" "-c" cmd)]
              (if (zero? exit)
                (when-not (clojure.string/blank? out)
                  (log/debugf "Command '%s' stdout: %s" action-id out))

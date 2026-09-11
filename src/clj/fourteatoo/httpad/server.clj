@@ -11,20 +11,23 @@
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
             [fourteatoo.httpad.config :refer [config]]
-            [fourteatoo.httpad.executor :as executor])
+            [fourteatoo.httpad.executor :as executor]
+            [clojure.core.async :as a :refer [go-loop <! >! timeout chan mult tap untap]]
+            [fourteatoo.httpad.telemetry :as telemetry])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]))
+
 
 ;; Set of active session UUIDs in memory
 (defonce active-sessions (atom #{}))
 
-(defn decode-transit
+(defn- decode-transit
   "Decodes a Transit JSON string into Clojure data structures."
   [msg-str]
   (let [in (ByteArrayInputStream. (.getBytes msg-str "UTF-8"))
         reader (transit/reader in :json)]
     (transit/read reader)))
 
-(defn encode-transit
+(defn- encode-transit
   "Encodes Clojure data structures into a Transit JSON string."
   [data]
   (let [out (ByteArrayOutputStream.)
@@ -44,7 +47,7 @@
     :headers {"Content-Type" "application/transit+json"}
     :body (encode-transit body)}))
 
-(defn login-handler
+(defn- login-handler
   "Validates passphrase against config and issues an HttpOnly session cookie."
   [req]
   (try
@@ -83,10 +86,7 @@
       (assoc clean-b :actions (mapv #(dissoc % :cmd) (:actions b)))
       clean-b)))
 
-(comment
-  (:sections config))
-
-(defn sanitize-config
+(defn- sanitize-config
   "Prepares configuration data for the frontend client by stripping commands."
   [config]
   {:sections
@@ -109,19 +109,37 @@
   (let [session-id (get-cookie req "macropad_session")]
     (if (and (seq session-id) (contains? @active-sessions session-id))
       (http/as-channel req
-        {:on-open (fn [ch]
-                    (log/infof "Authenticated WebSocket connected from IP: %s" (:remote-addr req)))
-         :on-receive (fn [_ch raw-msg]
-                       (try
-                         (let [payload (decode-transit raw-msg)
-                               action  (:action payload)]
-                           (if action
-                             (executor/execute! action)
-                             (log/warn "Received Transit WebSocket frame missing ':action' key")))
-                         (catch Exception e
-                           (log/error e "Failed to decode incoming Transit WebSocket frame"))))
-         :on-close (fn [_ch status]
-                     (log/debugf "WebSocket channel closed (status: %s)" status))})
+        {:on-open
+         (fn [ch]
+           (log/infof "Authenticated WebSocket connected from IP: %s" (:remote-addr req))
+           (let [client-async-chan (a/chan (a/sliding-buffer 10))]
+             
+             ;; Register handles tapping the mult, updating active state, & pushing initial snapshot
+             (telemetry/register-client ch client-async-chan)
+             
+             (a/go-loop []
+               (if-let [msg (a/<! client-async-chan)]
+                 (do
+                   (http/send! ch (encode-transit msg))
+                   (recur))
+                 (log/debug "Client async loop terminated")))))
+
+         :on-receive
+         (fn [_ch raw-msg]
+           (try
+             (let [payload (decode-transit raw-msg)
+                   action  (:action payload)]
+               (if action
+                 (executor/execute action)
+                 (log/warn "Received Transit WebSocket frame missing ':action' key")))
+             (catch Exception e
+               (log/error e "Failed to decode incoming Transit WebSocket frame"))))
+
+         :on-close
+         (fn [ch status]
+           (log/debugf "WebSocket channel closed (status: %s)" status)
+           ;; Unregister handles untapping, channel closing, and atom removal
+           (telemetry/unregister-client ch))})
       (do
         (log/warnf "Rejected unauthenticated WebSocket attempt from IP: %s" (:remote-addr req))
         {:status 403 :body "Forbidden"}))))

@@ -32,6 +32,13 @@
     (js/setTimeout connect-ws! delay)
     (reset! reconnect-delay (min 10000 (* delay 1.5)))))
 
+(defn- handle-incoming-message [msg]
+  (case (:type msg)
+    :telemetry
+    (swap! state/state update :telemetry merge (:metrics msg))
+    
+    (js/console.log "Unhandled WS message type:" (:type msg))))
+
 (defn connect-ws! []
   (let [host (.. js/window -location -host)
         protocol (if (= (.. js/window -location -protocol) "https:") "wss:" "ws:")
@@ -59,7 +66,7 @@
           (fn [evt]
             (try
               (let [msg (decode-transit (.-data evt))]
-                (js/console.log "Received WS message:" msg))
+                (handle-incoming-message msg))
               (catch :default e
                 (js/console.error "Error decoding Transit message:" e)))))
 

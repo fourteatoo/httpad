@@ -61,6 +61,56 @@
          (when (:icon act) [:span {:class "text-lg sm:text-xl"} (:icon act)])
          (when (:label act) [:span {:class "font-mono font-bold text-xs"} (:label act)])])]]))
 
+(defmethod render-element :gauge
+  [section-id {:keys [title value unit]}]
+  [:div {:class "p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl col-span-2 flex flex-col items-center justify-center"}
+   [:h2 {:class "text-xs font-bold text-slate-400 mb-2"} title]
+   ;; Simple SVG semi-circle gauge or numerical display
+   [:div {:class "text-2xl font-mono font-bold text-blue-400"}
+    (str value unit)]])
+
+(defn resolve-status
+  "Finds the applicable status keyword by checking metric-val 
+   against sorted thresholds in the levels map."
+  [metric-val levels]
+  (if (number? metric-val)
+    (let [thresholds (sort-by key > (or levels {0 :ok}))]
+      (some (fn [[limit status-key]]
+              (when (>= metric-val limit)
+                status-key))
+            thresholds))
+    :ok))
+
+(defmethod render-element :stat
+  [_ {:keys [title metric-key levels unit] :or {unit "%"}}]
+  (let [metric-val     (get-in @state/state [:telemetry metric-key])
+        current-val    (or metric-val 0)
+        current-status (resolve-status current-val levels)
+        formatted-val  (if (number? current-val)
+                         (str current-val unit)
+                         "--")]
+    [:div {:class "flex flex-col justify-between p-4 min-h-[110px] rounded-2xl bg-slate-900 border border-slate-800 shadow-xl select-none"}
+     [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase"} title]
+     [:div {:class "text-3xl font-mono font-extrabold text-slate-100 my-1"}
+      formatted-val]
+     [:div {:class "w-full bg-slate-800 h-1.5 rounded-full overflow-hidden"}
+      [:div {:class (str "h-full transition-all duration-500 "
+                         (case current-status
+                           :critical "bg-rose-500"
+                           :warning  "bg-amber-400"
+                           "bg-emerald-400"))
+             :style {:width (if (number? current-val)
+                              (str (min 100 (max 0 current-val)) "%")
+                              "0%")}}]]]))
+
+(comment
+  (render-element {:id :cpu-stat
+                        :type :stat
+                        :title "CPU LOAD"
+                        :metric-key :cpu-load
+                        :value "0%"
+                        :status :ok}))
+
 (defn section-view [{:keys [id title buttons]}]
   (let [sec-id (keyword id)]
     [:section {:class "col-span-full"}
