@@ -27,7 +27,7 @@
   "Executes a button command asynchronously behind a rate limiter.
    Default cooldown is 500ms per action-id."
   ([action-id]
-   (execute! action-id 400))
+   (execute action-id 400))
   ([action-id cooldown-ms]
    (if (rate-limited? action-id cooldown-ms)
      (log/warnf "Rate limit hit for action '%s'. Dropping execution." action-id)
