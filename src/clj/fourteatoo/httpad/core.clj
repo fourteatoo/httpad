@@ -2,6 +2,7 @@
   (:gen-class)
   (:require [mount.core :as mount]
             [fourteatoo.httpad.server]
+            [fourteatoo.httpad.mqtt]
             [unilog.config :as unilog]
             [clojure.tools.logging :as log]))
 
