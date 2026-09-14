@@ -156,4 +156,21 @@
                    (swap! state/state assoc :auth-error "Invalid Passphrase"))))
         (.catch (fn [err]
                   (js/console.error "Login failed:" err)
-                  (swap! state/state assoc :auth-error "Invalid Passphrase or Server Error"))))))
+                  (swap! state/state assoc :auth-error "Failed Login"))))))
+
+(defn logout! []
+  (stop-reconnect-timer!)
+  (when-let [ws @ws-conn]
+    (.close ws)
+    (reset! ws-conn nil))
+  (swap! state/state assoc
+         :auth-status :unauthenticated
+         :passphrase ""
+         :auth-error nil)
+  (js/fetch "/api/logout"
+            #js {:method "POST"
+                 :credentials "same-origin"
+                 :headers #js {"Accept" "application/transit+json"}}))
+
+(comment
+  (logout!))
