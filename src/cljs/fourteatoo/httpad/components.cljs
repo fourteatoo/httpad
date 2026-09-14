@@ -104,36 +104,195 @@
             thresholds))
     :ok))
 
-(defmethod render-element :stat
-  [_ {:keys [title metric-key levels unit] :or {unit "%"}}]
+;; --- Linear Progress Bar + Status ---
+(defmethod render-element :bar
+  [section-id {:keys [title metric-key levels unit] :or {unit "%"} :as item}]
   (let [metric-val     (get-in @state/state [:telemetry metric-key])
         current-val    (or metric-val 0)
         current-status (resolve-status current-val levels)
-        formatted-val  (if (number? current-val)
-                         (str current-val unit)
-                         "--")]
-    [:div {:class "flex flex-col justify-between p-4 min-h-[110px] rounded-2xl bg-slate-900 border border-slate-800 shadow-xl select-none"}
-     [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase"} title]
-     [:div {:class "text-3xl font-mono font-extrabold text-slate-100 my-1"}
-      formatted-val]
-     [:div {:class "w-full bg-slate-800 h-1.5 rounded-full overflow-hidden"}
-      [:div {:class (str "h-full transition-all duration-500 "
-                         (case current-status
-                           :critical "bg-rose-500"
-                           :warning  "bg-amber-400"
-                           "bg-emerald-400"))
-             :style {:width (if (number? current-val)
-                              (str (min 100 (max 0 current-val)) "%")
-                              "0%")}}]]]))
+        formatted-val  (if (number? metric-val)
+                         (str metric-val unit)
+                         "--")
+        max-threshold  (if (seq levels)
+                         (apply max (keys levels))
+                         100)
+        pct-fill       (if (number? metric-val)
+                         (min 100 (max 0 (* (/ current-val max-threshold) 100)))
+                         0)]
+    [action-wrapper item section-id
+     [:div {:class "flex flex-col justify-between min-h-[90px] w-full"}
+      [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase"} title]
+      [:div {:class "text-3xl font-mono font-extrabold text-slate-100 my-1"}
+       formatted-val]
+      [:div {:class "w-full bg-slate-800 h-1.5 rounded-full overflow-hidden"}
+       [:div {:class (str "h-full transition-all duration-500 "
+                          (case current-status
+                            :critical "bg-rose-500"
+                            :warning  "bg-amber-400"
+                            "bg-emerald-400"))
+              :style {:width (str pct-fill "%")}}]]]]))
 
-(comment
-  (render-element {:id :cpu-stat
-                        :type :stat
-                        :title "CPU LOAD"
-                        :metric-key :cpu-load
-                        :value "0%"
-                        :status :ok}))
 
+(defn polar->cartesian [cx cy radius angle-deg]
+  (let [rad (* (- angle-deg 90) (/ (.-PI js/Math) 180))]
+    [(+ cx (* radius (.cos js/Math rad)))
+     (+ cy (* radius (.sin js/Math rad)))]))
+
+(defn describe-arc [x y radius start-angle end-angle]
+  (let [[sx sy] (polar->cartesian x y radius end-angle)
+        [ex ey] (polar->cartesian x y radius start-angle)
+        large-arc (if (<= (- end-angle start-angle) 180) "0" "1")]
+    (str "M " sx " " sy " A " radius " " radius " 0 " large-arc " 0 " ex " " ey)))
+
+
+;; --- Radial Gauge + Status ---
+
+;; --- Radial Gauge (Cleaned Layout & Corrected Brackets) ---
+(defmethod render-element :gauge
+  [section-id {:keys [title metric-key levels unit] :or {unit "%"} :as item}]
+  (let [metric-val     (get-in @state/state [:telemetry metric-key])
+        current-val    (or metric-val 0)
+        current-status (resolve-status current-val levels)
+        
+        pct            (min 100 (max 0 current-val))
+        ;; Arc sweeps from -90 deg (left) to +90 deg (right)
+        angle          (- (* (/ pct 100) 180) 90)
+        
+        stroke-color   (case current-status
+                         :critical "#f43f5e"
+                         :warning  "#fbbf24"
+                         "#34d399")
+        formatted-val  (if (number? metric-val) (str metric-val unit) "--")]
+
+    [action-wrapper item section-id
+     [:div {:class "flex flex-col items-center justify-between min-h-[140px] w-full pt-1"}
+      
+      ;; Category / Title
+      [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase self-start mb-1"} 
+       title]
+      
+      ;; Arc + Center Readout Container
+      [:div {:class "relative flex flex-col items-center justify-center my-auto w-full"}
+       
+       ;; SVG ViewBox cropped tightly (100x44) to remove blank bottom space
+       [:svg {:viewBox "0 0 100 44" :class "w-40 h-20 overflow-visible"}
+        ;; Background Track
+        [:path {:d (describe-arc 50 40 34 -90 90)
+                :fill "none"
+                :stroke "#1e293b"
+                :stroke-width "7"
+                :stroke-linecap "round"}]
+        ;; Active Value Arc
+        (when (> pct 0)
+          [:path {:d (describe-arc 50 40 34 -90 angle)
+                  :fill "none"
+                  :stroke stroke-color
+                  :stroke-width "7"
+                  :stroke-linecap "round"
+                  :class "transition-all duration-500"}])]
+
+       ;; Numeric Value centered inside the arc curve (inside the relative div)
+       [:div {:class "absolute bottom-0 flex items-center justify-center text-center"}
+        [:span {:class "text-2xl font-mono font-extrabold text-slate-100 tracking-tight leading-none"}
+         formatted-val]]]]]))
+
+
+#_
+(defmethod render-element :gauge
+  [section-id {:keys [title metric-key levels unit] :or {unit "%"} :as item}]
+  (let [metric-val     (get-in @state/state [:telemetry metric-key])
+        current-val    (or metric-val 0)
+        current-status (resolve-status current-val levels)
+        
+        pct            (min 100 (max 0 current-val))
+        angle          (- (* (/ pct 100) 180) 90)
+        
+        stroke-color   (case current-status
+                         :critical "#f43f5e"
+                         :warning  "#fbbf24"
+                         "#34d399")]
+
+    [action-wrapper item section-id
+     [:div {:class "flex flex-col items-center justify-between min-h-[140px] w-full"}
+      [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase self-start"} title]
+      
+      [:div {:class "relative flex items-center justify-center my-1"}
+       [:svg {:viewBox "0 0 100 55" :class "w-36 h-20"}
+        [:path {:d (describe-arc 50 50 40 -90 90)
+                :fill "none"
+                :stroke "#1e293b"
+                :stroke-width "8"
+                :stroke-linecap "round"}]
+        (when (> pct 0)
+          [:path {:d (describe-arc 50 50 40 -90 angle)
+                  :fill "none"
+                  :stroke stroke-color
+                  :stroke-width "8"
+                  :stroke-linecap "round"
+                  :class "transition-all duration-500"}])]]
+       
+      [:div {:class "absolute bottom-0 text-center"}
+       [:span {:class "text-2xl font-mono font-extrabold text-slate-100"}
+        (if (number? metric-val) (str metric-val unit) "--")]]
+      
+      [:span {:class "text-[10px] font-mono text-slate-500"}
+       (str "STATUS: " (name current-status))]]]))
+
+;; --- Multi-action Stepper Control ---
+(defmethod render-element :stepper
+  [section-id {:keys [title desc icon actions] :as item}]
+  [action-wrapper item section-id
+   [:div {:class "flex flex-col justify-between min-h-[120px] w-full"}
+    
+    ;; Header area with title, description, and icon
+    [:div {:class "flex justify-between items-start w-full mb-3"}
+     [:div {:class "pr-1 min-w-0"}
+      [:h2 {:class "text-xs sm:text-sm font-bold text-slate-100 truncate"} title]
+      (when (seq desc)
+        [:p {:class "text-[10px] sm:text-xs text-slate-400 truncate"} desc])]
+     (when (seq icon)
+       [:span {:class "text-lg sm:text-xl opacity-85 flex-shrink-0 ml-1 pr-4"} icon])]
+
+    ;; Sub-action buttons grid
+    [:div {:class "grid grid-cols-2 gap-1.5 w-full mt-auto"}
+     (for [act actions
+           :let [parent-id (keyword (:id item))
+                 act-id    (keyword (or (:id act) (:action act)))
+                 cmd-path  (if parent-id
+                             [section-id parent-id act-id]
+                             [section-id act-id])]]
+       ^{:key (str act-id)}
+       [:button
+        {:on-click (fn [e]
+                     (.stopPropagation e) ; Stops triggering the outer card's main :cmd
+                     (ws/send-action! cmd-path))
+         :class "flex items-center justify-center gap-1.5 py-3 sm:py-3.5 min-h-[48px] bg-slate-800 hover:bg-slate-750 active:bg-blue-600 active:scale-95 rounded-xl border border-slate-700/80 text-slate-100 transition-all select-none touch-manipulation w-full"}
+        (when (:icon act) [:span {:class "text-lg sm:text-xl"} (:icon act)])
+        (when (:label act) [:span {:class "font-mono font-bold text-xs"} (:label act)])])]]])
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defn section-view [{:keys [id title columns buttons]}]
+  (let [sec-id      (keyword id)
+        global-cols (get-in @state/state [:layout :grid-cols] 6)
+        cols        (or columns global-cols)]
+    [:section {:class "col-span-full"}
+     (when (seq title)
+       [:div {:class "sticky top-0 z-10 -mx-4 px-4 py-2.5 bg-slate-950/85 backdrop-blur-md border-b border-slate-800/80 flex items-center gap-3 select-none mb-3"}
+        [:span {:class "text-xs font-bold tracking-wider uppercase text-slate-400"} title]
+        [:div {:class "h-[1px] flex-grow bg-slate-800/80"}]])
+
+     ;; Grid container with dynamic column count & gap
+     [:div {:class "grid"
+            :style {:grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")
+                    :gap "1rem"}}
+      (for [b buttons
+            :let [b-key (or (:id b) (:title b))]]
+        ^{:key (str b-key)}
+        [render-element sec-id b])]]))
+
+#_
 (defn section-view [{:keys [id title buttons]}]
   (let [sec-id (keyword id)]
     [:section {:class "col-span-full"}
@@ -204,38 +363,40 @@
           (swap! state/state assoc :active-tab sec-id))))))
 
 (defn dashboard []
-  (let [sections (:sections @state/state)
-        active-id (or (:active-tab @state/state) (keyword (:id (first sections))))]
-    [:div {:class "min-h-screen h-screen overflow-hidden bg-slate-950 text-slate-100 p-4 flex flex-col justify-between"}
-     [global-styles]
-     
-     ;; Header & Desktop Tabs
-     [:header {:class "flex items-center justify-between mb-4 flex-shrink-0"}
-      [:div
-       [:h1 {:class "text-base font-bold tracking-widest text-slate-200 uppercase"} "HTTP MACROPAD"]
-       [:p {:class "text-[11px] text-slate-500 font-mono"} "Local Session Control"]]
-      [status-pill]]
+  (fn []
+    (let [sections (:sections @state/state)
+          active-tab (:active-tab @state/state)
+          first-sec-id (some-> (first sections) :id keyword)
+          active-id (or active-tab first-sec-id)]
+      [:div {:class "min-h-screen h-screen overflow-hidden bg-slate-950 text-slate-100 p-4 flex flex-col justify-between"}
+       [global-styles]
+       
+       ;; Header & Desktop Tabs
+       [:header {:class "flex items-center justify-between mb-4 flex-shrink-0"}
+        [:div
+         [:h1 {:class "text-base font-bold tracking-widest text-slate-200 uppercase"} "HTTPAD"]
+         [:p {:class "text-[11px] text-slate-500 font-mono"} "a web-based macropad"]]
+        [grid-scaler][status-pill]]
 
-     [tab-header sections active-id #(swap! state/state assoc :active-tab %)]
+       [tab-header sections active-id #(swap! state/state assoc :active-tab %)]
 
-     [:main {:on-scroll #(handle-scroll % sections)
-:class "flex-1 w-full max-w-7xl mx-auto flex overflow-x-auto sm:overflow-visible snap-x snap-mandatory scroll-smooth no-scrollbar"
-        :style {:touch-action "pan-x pan-y"
-                :-webkit-overflow-scrolling "touch"}}
- (for [sec sections
-       :let [sec-id (keyword (:id sec))
-             active? (= sec-id active-id)]]
-   ^{:key (str sec-id)}
-   [:div {:class (str "w-full min-w-full flex-shrink-0 snap-center snap-always px-1 sm:px-0 "
-                      ;; On mobile (below sm): ALWAYS display block for horizontal scrolling track
-                      ;; On desktop (sm and up): Hide non-active sections
-                      (if active? "block" "block sm:hidden"))}
-    [section-view sec]])]
+       [:main {:on-scroll #(handle-scroll % sections)
+               :class "flex-1 w-full max-w-7xl mx-auto flex overflow-x-auto sm:overflow-visible snap-x snap-mandatory scroll-smooth no-scrollbar"
+               :style {:touch-action "pan-x pan-y"
+                       :-webkit-overflow-scrolling "touch"}}
+        (for [sec sections
+              :let [sec-id (keyword (:id sec))
+                    active? (= sec-id active-id)]]
+          ^{:key (str sec-id)}
+          [:div {:class (str "w-full min-w-full flex-shrink-0 snap-center snap-always px-1 sm:px-0 "
+                             (if active? "block" "block sm:hidden"))}
+           [section-view sec]])]
 
-     ;; Page Dots
-     [:div {:class "flex sm:hidden justify-center gap-1.5 my-3"}
-      (for [sec sections
-            :let [sec-id (keyword (:id sec))]]
-        ^{:key (str sec-id)}
-        [:div {:class (str "h-2 rounded-full transition-all duration-300 "
-                           (if (= sec-id active-id) "bg-blue-500 w-5" "bg-slate-800 w-2"))}])]]))
+       ;; Page Dots
+       [:div {:class "flex sm:hidden justify-center gap-1.5 my-3"}
+        (for [sec sections
+              :let [sec-id (keyword (:id sec))]]
+          ^{:key (str sec-id)}
+          [:div {:class (str "h-2 rounded-full transition-all duration-300 "
+                             (if (= sec-id active-id) "bg-blue-500 w-5" "bg-slate-800 w-2"))}])]])))
+
