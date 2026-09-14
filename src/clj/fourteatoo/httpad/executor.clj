@@ -1,7 +1,8 @@
 (ns fourteatoo.httpad.executor
   (:require [clojure.java.shell :refer [sh]]
             [clojure.tools.logging :as log]
-            [fourteatoo.httpad.config :refer [config]]))
+            [fourteatoo.httpad.config :refer [config]]
+            [fourteatoo.httpad.mqtt :as mqtt]))
 
 ;; Tracks last execution timestamp (in ms) per button ID
 (defonce ^:private last-executed (atom {}))
@@ -23,6 +24,24 @@
   (or (get-in config (concat [:action-index] action-path [:default]))
       (get-in config (concat [:action-index] action-path))))
 
+(defmulti execute-command :type)
+
+(defmethod execute-command :mqtt
+  [{:keys [topic message]}]
+  (mqtt/publish! mqtt/mqtt-subscriber topic (or message "")))
+
+(defmethod execute-command :shell
+  [{:keys [command]}]
+  (let [{:keys [exit out err]} (sh "sh" "-c" command)]
+    (if (zero? exit)
+      (when-not (clojure.string/blank? out)
+        (log/debugf "Command '%s' stdout: %s" command out))
+      (log/errorf "Command '%s' failed (exit code %d): %s" command exit err))))
+
+(defmethod execute-command nil
+  [cmd]
+  (execute-command {:type :shell :command cmd}))
+
 (defn execute
   "Executes a button command asynchronously behind a rate limiter.
    Default cooldown is 500ms per action-id."
@@ -36,11 +55,7 @@
        (future
          (try
            (log/infof "Executing command for %s: %s" action-id cmd)
-           (let [{:keys [exit out err]} (sh "sh" "-c" cmd)]
-             (if (zero? exit)
-               (when-not (clojure.string/blank? out)
-                 (log/debugf "Command '%s' stdout: %s" action-id out))
-               (log/errorf "Command '%s' failed (exit code %d): %s" action-id exit err)))
+           (execute-command cmd)
            (catch Exception e
              (log/error e (format "Failed to dispatch command for %s" action-id)))))
        (log/warnf "No command configured for action-id: %s" action-id)))))
