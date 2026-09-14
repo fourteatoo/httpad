@@ -13,7 +13,9 @@
             [fourteatoo.httpad.config :refer [config]]
             [fourteatoo.httpad.executor :as executor]
             [clojure.core.async :as a :refer [go-loop <! >! timeout chan mult tap untap]]
-            [fourteatoo.httpad.telemetry :as telemetry])
+            [fourteatoo.httpad.telemetry :as telemetry]
+            [clojure.edn :as edn]
+            [clojure.string :as s])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]))
 
 
@@ -154,6 +156,62 @@
    :session nil ;; Clear Ring session memory
    :body (encode-transit {:success true})})
 
+(defn focus-handler
+  "Processes incoming window focus EDN payloads from external watcher
+   script and broadcasts a tab-switch message to UIs via the telemetry
+   channel."
+  [req]
+  (try
+    (let [body-str    (slurp (:body req))
+          payload     (edn/read-string body-str)
+          win-name    (some-> (:window payload) name s/trim)
+          sections    (:sections config)
+          class->id   (into {}
+                            (for [sec sections
+                                  :let [sec-id (:id sec)
+                                        win-key (name (or (:window-class sec) (:id sec)))]]
+                              [win-key sec-id]))
+          
+          target-id   (get class->id win-name)]
+      (if target-id
+        (do
+          (log/infof "Focus match found: window '%s' -> section tab '%s'" win-name target-id)
+          ;; Push onto telemetry pipeline - mult automatically fans out to all clients
+          (telemetry/broadcast {:type :active-section 
+                                :section target-id})
+          {:status 200
+           :headers {"Content-Type" "application/edn"}
+           :body (pr-str {:status :ok})})
+        (do
+          (log/debugf "No matching section for focused window '%s'" win-name)
+          {:status 200
+           :headers {"Content-Type" "application/edn"}
+           :body (pr-str {:status :ignored})})))
+    (catch Exception e
+      (log/error e "Failed to process focus EDN request")
+      {:status 500
+       :headers {"Content-Type" "application/edn"}
+       :body (pr-str {:status :error
+                      :message "Internal error"
+                      :error (str e)})})))
+
+#_
+(defn focus-handler [req]
+  (let [payload (try 
+                  (edn/read-string (slurp (:body req))) 
+                  (catch Exception _ nil))
+        win-name    (some-> (:window payload) name s/trim)
+        sections    (:sections config)
+        valid-ids   (set (map #(name (:id %)) sections))
+        matching-id (when (contains? valid-ids win-name)
+                      win-name)]
+    (when matching-id
+      (ws/broadcast! [:dashboard/set-tab (keyword matching-id)]))
+    
+    {:status 200
+     :headers {"Content-Type" "application/edn"}
+     :body "{:status :ok}"}))
+
 (defn- app-routes [req]
   (case (:uri req)
     "/" (resp/resource-response "public/index.html")
@@ -163,6 +221,7 @@
     "/api/logout" (logout-handler req)
     "/api/auth-status" (auth-status-handler req)
     "/api/config"      (config-handler req)
+    "/api/focus" (focus-handler req)
     "/ws"              (ws-handler req)
     {:status 404 :body "Not Found"}))
 

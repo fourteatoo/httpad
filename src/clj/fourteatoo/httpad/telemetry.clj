@@ -36,6 +36,13 @@
     (a/close! client-async-chan)
     (swap! active-clients dissoc ch)))
 
+(defn broadcast
+  "Pushes an event onto the telemetry channel, fanning out to all tapped
+  clients."
+  [event-map]
+  (a/>!! telemetry-chan event-map))
+
+
 ;; -----------------------------------------------------------------------------
 ;; 3. Samplers & Loops
 ;; -----------------------------------------------------------------------------

@@ -49,6 +49,12 @@
     :telemetry
     (swap! state/state update :telemetry merge (:metrics msg))
     
+    :active-section
+    (when (some #(= (keyword (:id %))
+                    (:section msg))
+                (:sections @state/state))
+      (swap! state/state assoc :active-tab (:section msg)))
+
     (js/console.log "Unhandled WS message type:" (:type msg))))
 
 (defn connect-ws! []
@@ -72,11 +78,6 @@
           ;; (send-ws-message! {:type :init})
           (catch :default err
             (js/console.error "Error in WS onopen handler:" err)))))
-    #_(set! (.-onopen ws)
-          (fn []
-            (js/console.log "WebSocket connection established")
-            (swap! state/state assoc :ws-connected? true)
-            (reset! reconnect-delay 1000)))
     
     (set! (.-onclose ws)
           (fn [evt]

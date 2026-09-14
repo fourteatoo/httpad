@@ -1,5 +1,6 @@
 (ns fourteatoo.httpad.components
-  (:require [fourteatoo.httpad.ws :as ws]
+  (:require [reagent.core :as r]
+            [fourteatoo.httpad.ws :as ws]
             [fourteatoo.httpad.state :as state]))
 
 (defn status-pill []
@@ -362,41 +363,80 @@
         (when-not (= sec-id (:active-tab @state/state))
           (swap! state/state assoc :active-tab sec-id))))))
 
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+
+(defn scroll-container-to-index!
+  "Programmatically scrolls the main mobile snap container to the tab index."
+  [idx]
+  (when (and idx (>= idx 0))
+    (when-let [main-el (.querySelector js/document "main")]
+      (let [container-width (.-clientWidth main-el)
+            target-left     (* idx container-width)]
+        (.scrollTo main-el #js {:left target-left :behavior "smooth"})))))
+
+
+
+(defn- header-component []
+  [:header {:class "flex items-center justify-between mb-4 flex-shrink-0"}
+   [:div
+    [:h1 {:class "text-base font-bold tracking-widest text-slate-200 uppercase"} "HTTPAD"]
+    [:p {:class "text-[11px] text-slate-500 font-mono"} "a web-based macropad"]]
+   [grid-scaler][status-pill]])
+
 (defn dashboard []
-  (fn []
-    (let [sections (:sections @state/state)
-          active-tab (:active-tab @state/state)
-          first-sec-id (some-> (first sections) :id keyword)
-          active-id (or active-tab first-sec-id)]
-      [:div {:class "min-h-screen h-screen overflow-hidden bg-slate-950 text-slate-100 p-4 flex flex-col justify-between"}
-       [global-styles]
-       
-       ;; Header & Desktop Tabs
-       [:header {:class "flex items-center justify-between mb-4 flex-shrink-0"}
-        [:div
-         [:h1 {:class "text-base font-bold tracking-widest text-slate-200 uppercase"} "HTTPAD"]
-         [:p {:class "text-[11px] text-slate-500 font-mono"} "a web-based macropad"]]
-        [grid-scaler][status-pill]]
+  (let [main-ref (atom nil)
+        prev-tab (atom nil)]
+    (r/create-class
+     {:displayName "Dashboard"
 
-       [tab-header sections active-id #(swap! state/state assoc :active-tab %)]
+      :component-did-mount
+      (fn [_]
+        (reset! prev-tab (:active-tab @state/state))
+        (when-let [el @main-ref]
+          (.addEventListener el "scrollend"
+            (fn [_]
+              (let [scroll-left (.-scrollLeft el)
+                    width       (.-clientWidth el)]
+                (when (> width 0)
+                  (let [idx      (js/Math.round (/ scroll-left width))
+                        sections (:sections @state/state)
+                        sec      (nth sections idx nil)]
+                    (when-let [sec-id (some-> sec :id keyword)]
+                      (when-not (= sec-id (:active-tab @state/state))
+                        (reset! prev-tab sec-id)
+                        (swap! state/state assoc :active-tab sec-id))))))))))
 
-       [:main {:on-scroll #(handle-scroll % sections)
-               :class "flex-1 w-full max-w-7xl mx-auto flex overflow-x-auto sm:overflow-visible snap-x snap-mandatory scroll-smooth no-scrollbar"
-               :style {:touch-action "pan-x pan-y"
-                       :-webkit-overflow-scrolling "touch"}}
-        (for [sec sections
-              :let [sec-id (keyword (:id sec))
-                    active? (= sec-id active-id)]]
-          ^{:key (str sec-id)}
-          [:div {:class (str "w-full min-w-full flex-shrink-0 snap-center snap-always px-1 sm:px-0 "
-                             (if active? "block" "block sm:hidden"))}
-           [section-view sec]])]
+      :component-did-update
+      (fn [_]
+        (let [sections    (:sections @state/state)
+              current-tab (:active-tab @state/state)]
+          (when (and current-tab (not= current-tab @prev-tab))
+            (reset! prev-tab current-tab)
+            (let [sec-ids (mapv #(keyword (:id %)) sections)
+                  idx     (.indexOf sec-ids current-tab)]
+              (when (and (>= idx 0) @main-ref)
+                (let [target-left (* idx (.-clientWidth @main-ref))]
+                  (.scrollTo @main-ref #js {:left target-left :behavior "smooth"})))))))
 
-       ;; Page Dots
-       [:div {:class "flex sm:hidden justify-center gap-1.5 my-3"}
-        (for [sec sections
-              :let [sec-id (keyword (:id sec))]]
-          ^{:key (str sec-id)}
-          [:div {:class (str "h-2 rounded-full transition-all duration-300 "
-                             (if (= sec-id active-id) "bg-blue-500 w-5" "bg-slate-800 w-2"))}])]])))
+      :reagent-render
+      (fn []
+        (let [sections  (:sections @state/state)
+              active-id (or (:active-tab @state/state)
+                            (some-> (first sections) :id keyword))]
+          [:div {:class "min-h-screen h-screen flex flex-col justify-between bg-slate-950 text-slate-100 p-4"}
+           [header-component]
+           [tab-header sections active-id #(swap! state/state assoc :active-tab %)]
 
+           [:main {:ref #(reset! main-ref %)
+                   :class "flex-1 w-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"}
+            (for [sec sections
+                  :let [sec-id (keyword (:id sec))]]
+              ^{:key (str sec-id)}
+              [:div {:class "w-full min-w-full flex-shrink-0 snap-center px-1"}
+               [section-view sec]])]]))})))
