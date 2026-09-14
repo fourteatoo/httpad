@@ -93,10 +93,10 @@
     (set! (.-onmessage ws)
           (fn [evt]
             (try
-              (let [msg (decode-transit (.-data evt))]
-                (handle-incoming-message msg))
-              (catch :default e
-                (js/console.error "Error decoding Transit message:" e)))))
+              (let [data (decode-transit (.-data evt))]
+                (handle-incoming-message data))
+              (catch :default err
+                (js/console.error "Error parsing WS message frame:" err (.-data evt))))))
 
     (reset! ws-conn ws)))
 
