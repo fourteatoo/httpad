@@ -17,13 +17,14 @@
                  [org.clojure/tools.logging "1.3.1"]
                  ;; WARNING: Version 2.x breaks compatibility
                  [reagent "1.3.0"]
-                 [thheller/shadow-cljs "3.4.12"]
+                 [thheller/shadow-cljs "3.5.1"]
+                 [org.eclipse.paho/org.eclipse.paho.client.mqttv3 "1.2.5"]
                  ;; Tailwind CLI packed as a runnable Java jar dependency
                  [org.webjars.npm/tailwindcss "4.3.3"]
                  [org.clojure/clojurescript "1.12.145"]
                  [ring-transit "0.1.6"]
                  [com.cognitect/transit-cljs "0.8.280"]
-                 [org.slf4j/slf4j-simple "2.0.18"]]
+                 #_[org.slf4j/slf4j-simple "2.0.19"]]
 
   :plugins [#_[lein-cljsbuild "1.1.8"]
             [lein-shell "0.5.0"]]
