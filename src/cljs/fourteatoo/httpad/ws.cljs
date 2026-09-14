@@ -4,7 +4,28 @@
             [fourteatoo.httpad.state :as state]))
 
 (defonce ws-conn (atom nil))
-(defonce reconnect-delay (atom 1000)) ; Initial reconnect delay (1s)
+
+(defonce reconnect-delay (atom 1000))
+(defonce reconnect-timer (atom nil))
+
+(defn stop-reconnect-timer! []
+  (when-let [timer-id @reconnect-timer]
+    (js/clearTimeout timer-id)
+    (reset! reconnect-timer nil))
+  ;; Reset backoff delay for future logins
+  (reset! reconnect-delay 1000))
+
+(declare connect-ws!)
+
+(defn- schedule-reconnect! []
+  ;; Clear any previously scheduled timer first
+  (stop-reconnect-timer!)
+  (let [delay @reconnect-delay]
+    (js/console.log (str "Scheduling WS reconnect in " delay "ms"))
+    (let [timer-id (js/setTimeout connect-ws! delay)]
+      (reset! reconnect-timer timer-id))
+    (reset! reconnect-delay (min 10000 (* delay 1.5)))))
+
 
 ;; --- Transit Serialization ---
 (def ^:private transit-writer (t/writer :json))
@@ -23,15 +44,6 @@
              (.then (.text res) #(decode-transit %))
              (js/Promise.reject res)))))
 
-;; --- WebSocket Connection Management ---
-(declare connect-ws!)
-
-(defn- schedule-reconnect! []
-  (let [delay @reconnect-delay]
-    (js/console.log (str "Scheduling WS reconnect in " delay "ms"))
-    (js/setTimeout connect-ws! delay)
-    (reset! reconnect-delay (min 10000 (* delay 1.5)))))
-
 (defn- handle-incoming-message [msg]
   (case (:type msg)
     :telemetry
@@ -40,22 +52,38 @@
     (js/console.log "Unhandled WS message type:" (:type msg))))
 
 (defn connect-ws! []
+  ;; Avoid opening duplicate sockets if one is already connecting/open
+  (when-let [old-ws @ws-conn]
+    (when (or (= (.-readyState old-ws) js/WebSocket.OPEN)
+              (= (.-readyState old-ws) js/WebSocket.CONNECTING))
+      (.close old-ws)))
+
   (let [host (.. js/window -location -host)
         protocol (if (= (.. js/window -location -protocol) "https:") "wss:" "ws:")
         ws-url (str protocol "//" host "/ws")
         ws (js/WebSocket. ws-url)]
 
     (set! (.-onopen ws)
+      (fn [evt]
+        (try
+          (js/console.log "WS Open successfully")
+          (swap! state/state assoc :ws-connected? true)
+          ;; If you send an initial token or subscribe message, wrap it here:
+          ;; (send-ws-message! {:type :init})
+          (catch :default err
+            (js/console.error "Error in WS onopen handler:" err)))))
+    #_(set! (.-onopen ws)
           (fn []
             (js/console.log "WebSocket connection established")
             (swap! state/state assoc :ws-connected? true)
             (reset! reconnect-delay 1000)))
-
+    
     (set! (.-onclose ws)
           (fn [evt]
-            (js/console.log "WebSocket closed:" (.-code evt))
+            (js/console.warn "WS Closed -> Code:" (.-code evt) "Reason:" (.-reason evt) "WasClean:" (.-wasClean evt))
             (swap! state/state assoc :ws-connected? false)
-            (schedule-reconnect!)))
+            (when (= (:auth-status @state/state) :authenticated)
+              (schedule-reconnect!))))
 
     (set! (.-onerror ws)
           (fn [err]
@@ -94,15 +122,16 @@
                 (swap! state/state assoc :auth-status :unauthenticated)))))
 
 (defn check-auth! []
-  (-> (js/fetch "/api/auth-status")
+  (-> (js/fetch "/api/auth-status"
+                #js {:headers #js {"Accept" "application/transit+json"}})
       parse-transit
       (.then (fn [data]
-               (let [js-data (js->clj data :keywordize-keys true)]
-                 (if (:authenticated? js-data)
-                   (do
-                     (swap! state/state assoc :auth-status :authenticated)
-                     (fetch-config!))
-                   (swap! state/state assoc :auth-status :unauthenticated)))))
+               ;; data is ALREADY a Clojure map: {:authenticated? true}
+               (if (:authenticated? data)
+                 (do
+                   (swap! state/state assoc :auth-status :authenticated)
+                   (fetch-config!))
+                 (swap! state/state assoc :auth-status :unauthenticated))))
       (.catch (fn [_]
                 (swap! state/state assoc :auth-status :unauthenticated)))))
 
@@ -116,7 +145,8 @@
                        :body (encode-transit {:passphrase passphrase})})
         parse-transit
         (.then (fn [data]
-                 (if (or (:success data) (:authenticated? data) (= data true))
+                 ;; data is ALREADY a Clojure map: {:success true}
+                 (if (= "ok" (:status data))
                    (do
                      (swap! state/state assoc
                             :auth-status :authenticated
