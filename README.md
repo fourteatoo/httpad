@@ -51,6 +51,120 @@ Before you can do anything with it, HTTPAD needs a configuration file.
 That would be `~/.htppad`.  In this file you configure which port you
 want to use and what buttons to display.
 
+The following is an example (and just an example):
+
+```clojure
+;; -*- EDN -*-
+{:port 8080
+ :auth-token "password"
+ :mqtt {:host "myserver"
+        :port 1883
+        :topics {"shellies/shellyswitch25-123456789098/temperature" :bathroom-temperature
+                 "tele/home/wms03/SENSOR" {[:ENERGY :Power] :washing-machine}}}
+ :sections [{:id :system
+             :title "System Control"
+             :buttons [{:id :power-menu
+                        :title "Power"
+                        :desc "System session menu"
+                        :icon "🔌"
+                        :cmd "xdotool key XF86PowerOff"}
+                       {:id :mute
+                        :type :stepper
+                        :title "Volume"
+                        :desc "Master output level"
+                        :cmd "xdotool key XF86AudioMute"
+                        :actions [{:id :vol-down :icon "🔉" :label "-"
+                                   :cmd "xdotool key XF86AudioLowerVolume"}
+                                  {:id :vol-up   :icon "🔊" :label "+"
+                                   :cmd "xdotool key XF86AudioRaiseVolume"}]}
+                       {:id :display-brightness
+                        :type :stepper
+                        :title "Display Brightness"
+                        :desc "Primary monitor"
+                        :actions [{:id :bright-down :icon "🔅" :label "-"
+                                   :cmd "xdotool key XF86MonBrightnessDown"}
+                                  {:id :bright-up   :icon "🔆" :label "+"
+                                   :cmd "xdotool key XF86MonBrightnessUp"}]}
+                       {:id :print-screen
+                        :title "Print Screen"
+                        :desc "Desktop Print"
+                        :icon "🖥️"
+                        :cmd "xdotool key Print"}
+                       {:id :print-window
+                        :title "Print Window"
+                        :desc "Desktop Print"
+                        :icon "🖥️"
+                        :cmd "xdotool key shift+Print"}
+                       {:id :lock-screen
+                        :title "Lock Screen"
+                        :desc "System Lock"
+                        :icon "🔒"
+                        :cmd "cinnamon-screensaver-command -l"}]}
+            {:id :home
+             :title "Home"
+             :buttons [{:id :all-lights-off
+                        :title "All Lights OFF"
+                        :desc "whole apartment"
+                        :icon "💡"
+                        :cmd {:type :mqtt
+                              :topic "macro/all-lights-off"}}
+                       {:id :all-kimi-off
+                        :title "Kids OFF"
+                        :desc "lights and sockets"
+                        :icon "💡"
+                        :cmd {:type :mqtt
+                              :topic "macro/all-kids-off"}}
+                       {:id :open-door
+                        :title "Open Door"
+                        :desc "building front door"
+                        :icon "🚪"
+                        :cmd {:type :mqtt
+                              :topic "macro/open-door"}}
+                       {:id :cpu-stat
+                        :type :bar
+                        :title "CPU LOAD"
+                        :metric-key :cpu-load
+                        :levels {0 :ok 75 :warning 90 :critical}}
+                       {:id :bathroom-stat
+                        :type :metric
+                        :unit "C"
+                        :title "Bathroom"
+                        :metric-key :bathroom-temperature}
+                       {:id :washing-stat
+                        :type :gauge
+                        :unit "W"
+                        :title "Washing machine"
+                        :metric-key :washing-machine
+                        :levels {0 :ok 300 :warning 1000 :critical}}]}
+            {:id :gimp
+             :title "GIMP Tools"
+             :buttons [{:id "tool-brush"
+                        :title "Brush"
+                        :icon "🖌️"
+                        :cmd "xdotool key p"}
+                       {:id "tool-eraser"
+                        :title "Eraser"
+                        :icon "🧹"
+                        :cmd "xdotool key Shift+E"}
+                       {:id "tool-select"
+                        :title "Wand"
+                        :icon "🪄"
+                        :cmd "xdotool key u"}
+                       {:id "view-fit"
+                        :title "Fit Screen"
+                        :icon "🖼️"
+                        :cmd "xdotool key Ctrl+Shift+J"}
+                       {:id "view-tab"
+                        :title "Toggle UI"
+                        :icon "👁️"
+                        :cmd "xdotool key Tab"}
+                       {:id "select-none"
+                        :title "Deselect"
+                        :icon "❌"
+                        :cmd "xdotool key Ctrl+Shift+A"}]}]}
+   
+```
+
 ## Usage
 
 HTTPAD is meant to be run from your `.xprofile` at the login.  It
@@ -60,7 +174,27 @@ Androi/iOS device you have dedicated to the purpose.
     $ java -jar httpad.jar
 
 From your mobile device connect to http://yourcomputer:port/.  You
-should see a keypad as you configured it yourself.
+should be asked an access password.
+
+![login screen](doc/15969.png)
+
+If you enter what you have configured in your `~/.httpad` a button
+grid will appear.
+
+![desktop utilities](doc/15970.png)
+
+At the top you can configure how many columns you wish to see (thus
+changing the geometry of the buttons).  Swiping to the left you can
+see the next section.
+
+![home actions](doc/15971.png)
+
+and the next
+
+![Gimp shortcuts](doc/15972.png)
+
+for as many as you configured.
+
 
 ## Options
 
