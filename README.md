@@ -170,9 +170,10 @@ The following is an example (and just an example):
 
 HTTPAD is meant to be run from your `.xprofile` at the login.  It
 listens to the port you have configured for connections from any
-Androi/iOS device you have dedicated to the purpose.
+Androi/iOS device you have dedicated to the purpose.  Start it simply
+doing:
 
-    $ java -jar httpad.jar
+    $ httpad
 
 From your mobile device connect to http://yourcomputer:port/.  You
 should be asked an access password.
