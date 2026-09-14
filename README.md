@@ -139,6 +139,7 @@ The following is an example (and just an example):
                         :levels {0 :ok 300 :warning 1000 :critical}}]}
             {:id :gimp
              :title "GIMP Tools"
+             :window-class "Gimp"
              :buttons [{:id "tool-brush"
                         :title "Brush"
                         :icon "🖌️"
@@ -197,6 +198,32 @@ and the next
 
 for as many as you configured.
 
+### Context awareness
+
+HTTPAD can be made context aware.  That is, HTTPAD will scroll to the
+relevant section whenever it detects that you have changed window
+focus on your desktop.  See the `:window-class` of each `:section`.
+Example:
+
+```EDN
+{:sections [{:id :gimp
+             :title "GIMP Tools"
+             :window-class "gimp"
+             :buttons [...]}
+            {:id :darktable
+             :title "Photo Editing"
+             :window-class "darktable"
+             :buttons [...]}
+            {:id :audacity
+             :title "Audio Editing"
+             :window-class "Audacity"
+             :buttons [...]}]
+ ...}
+```
+
+With such configuration, whenever you focus your Gimp window, HTTPAD
+will also switch to the Gimp section.  When you focus the Darktable
+window, HTTPS will also switch to the Darktable section.  And so on.
 
 ## Options
 
