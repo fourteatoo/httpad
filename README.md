@@ -40,10 +40,11 @@ Compile
 
     $ lein uberjar
    
-Copy the uberjar in your `~/bin` directory.
-
+Copy the uberjar and the trampoline shell script into your `~/bin` directory.
 
     $ cp target/httpad-<VERSION>-standalone.jar ~/bin/httpad.jar
+	$ cp httpad.sh ~/bin/httpad
+	$ chmod 750 ~/bin/httpad
 
 ## Configuration
 
