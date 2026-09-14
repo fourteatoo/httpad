@@ -81,9 +81,11 @@
 
 (defn- sanitize-button
   [b]
-  (let [clean-b (dissoc b :cmd)]
+  (let [clean-b (update b :cmd some?)]
     (if (seq (:actions b))
-      (assoc clean-b :actions (mapv #(dissoc % :cmd) (:actions b)))
+      (update clean-b :actions
+              (fn [acts]
+                (map #(dissoc % :cmd) acts)))
       clean-b)))
 
 (defn- sanitize-config
