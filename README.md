@@ -176,22 +176,22 @@ Androi/iOS device you have dedicated to the purpose.
 From your mobile device connect to http://yourcomputer:port/.  You
 should be asked an access password.
 
-<img src="doc/15969.png" width="200" alt="login screen">
+<img src="doc/15969.png" width="300" alt="login screen">
 
 If you enter what you have configured in your `~/.httpad` a button
 grid will appear.
 
-<img src="doc/15970.png" width="200" alt="desktop">
+<img src="doc/15970.png" width="300" alt="desktop">
 
 At the top you can configure how many columns you wish to see (thus
 changing the geometry of the buttons).  Swiping to the left you can
 see the next section.
 
-<img src="doc/15971.png" width="200" alt="home automation">
+<img src="doc/15971.png" width="300" alt="home automation">
 
 and the next
 
-<img src="doc/15972.png" width="200" alt="Gimp">
+<img src="doc/15972.png" width="300" alt="Gimp">
 
 for as many as you configured.
 
