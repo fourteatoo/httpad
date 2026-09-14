@@ -174,7 +174,7 @@
      "Unlock Deck"]]])
 
 (defn tab-header [sections active-section-id on-select]
-  [:div {:class "hidden sm:flex items-center gap-2 mb-4 overflow-x-auto"}
+  [:div {:class "hidden sm:flex flex-shrink-0 items-center gap-2 mb-4 overflow-x-auto"}
    (for [sec sections
          :let [sec-id (keyword (:id sec))
                active? (= sec-id active-section-id)]]
