@@ -146,12 +146,21 @@
         (log/warnf "Rejected unauthenticated WebSocket attempt from IP: %s" (:remote-addr req))
         {:status 403 :body "Forbidden"}))))
 
+(defn- logout-handler [req]
+  {:status 200
+   :headers {"Content-Type" "application/transit+json"
+             ;; Force browser to immediately drop the session cookie
+             "Set-Cookie" "macropad_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"}
+   :session nil ;; Clear Ring session memory
+   :body (encode-transit {:success true})})
+
 (defn- app-routes [req]
   (case (:uri req)
     "/" (resp/resource-response "public/index.html")
     "/api/login"       (if (= (:request-method req) :post)
                          (login-handler req)
                          {:status 451 :body "Method Not Allowed"})
+    "/api/logout" (logout-handler req)
     "/api/auth-status" (auth-status-handler req)
     "/api/config"      (config-handler req)
     "/ws"              (ws-handler req)
