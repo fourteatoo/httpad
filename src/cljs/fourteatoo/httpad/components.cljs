@@ -10,64 +10,87 @@
      [:span {:class "text-[11px] font-semibold text-slate-400 uppercase tracking-wider"}
       (if connected? "Connected" "Reconnecting")]]))
 
+(defn grid-scaler []
+  (let [cols (get-in @state/state [:layout :grid-cols] 6)]
+    [:div {:class "flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl p-1.5"}
+     [:button {:on-click #(swap! state/state update-in [:layout :grid-cols] (fn [n] (max 2 (dec (or n 6)))))
+               :class "p-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"} "-"]
+     [:span {:class "text-xs font-mono text-slate-400"} (str cols " cols")]
+     [:button {:on-click #(swap! state/state update-in [:layout :grid-cols] (fn [n] (min 12 (inc (or n 6)))))
+               :class "p-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"} "+"]]))
+;; EDN Example:
+;; {:type :gauge :id :cpu :title "CPU Load" :col-span 2 :row-span 1 :cmd true}
+(defn action-wrapper
+  "Wraps a widget with optional dynamic col/row spans."
+  [{:keys [id cmd class col-span row-span]} section-id content]
+  (let [has-cmd? (boolean cmd)
+        cmd-path (when has-cmd? [section-id (keyword id)])
+        col-span (or col-span 1)
+        row-span (or row-span 1)]
+    [:div
+     {:on-click (when has-cmd? #(ws/send-action! cmd-path))
+      :style {:grid-column (str "span " col-span " / span " col-span)
+              :grid-row    (str "span " row-span " / span " row-span)}
+      :class (str "relative flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl select-none transition-all "
+                  (if has-cmd?
+                    "active:scale-95 active:border-blue-500 touch-manipulation cursor-pointer"
+                    "cursor-default")
+                  " " class)}
+     
+     (when has-cmd?
+       [:div {:class "absolute top-3 right-3 w-2 h-2 rounded-full bg-blue-500/50 shadow-[0_0_8px_rgba(59,130,246,0.5)]"}])
+     
+     content]))
+
+
+#_
+(defn action-wrapper
+  "Wraps an element with touch/click interaction and a visual indicator 
+   if a command is attached."
+  [{:keys [id cmd class]} section-id content]
+  (let [has-cmd? (boolean cmd)
+        cmd-path (when has-cmd? [section-id id])]
+    [:div
+     {:on-click (when has-cmd? #(ws/send-action! cmd-path))
+      :class (str "relative flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl select-none transition-all "
+                  (if has-cmd?
+                    "active:scale-95 active:border-blue-500 touch-manipulation cursor-pointer"
+                    "cursor-default")
+                  " " class)}
+     
+     ;; The action indicator dot appears top-right for ANY widget with a :cmd
+     (when has-cmd?
+       [:div {:class "absolute top-3 right-3 w-2 h-2 rounded-full bg-blue-500/50 shadow-[0_0_8px_rgba(59,130,246,0.5)]"}])
+     
+     content]))
+
 ;; --- Multimethod Element Renderer ---
 (defmulti render-element (fn [section-id item] (or (:type item) :button)))
 
+;; --- Standard Button / Action Card ---
 (defmethod render-element :button
-  [section-id {:keys [id title desc icon]}]
-  (let [btn-id (keyword id)
-        cmd-path [section-id btn-id]]
-    [:button
-     {:on-click #(ws/send-action! cmd-path)
-      :class "flex flex-col justify-between p-4 sm:p-5 min-h-[110px] rounded-2xl bg-slate-900 border border-slate-800 shadow-xl active:scale-95 active:border-blue-500 transition-all select-none touch-manipulation text-left"}
-     [:div {:class "flex justify-between items-center w-full mb-3"}
-      [:span {:class "text-3xl sm:text-4xl"} icon]
-      [:div {:class "w-2 h-2 rounded-full bg-blue-500/50"}]]
-     [:div
-      [:h2 {:class "text-xs sm:text-sm font-bold text-slate-100"} title]
-      (when (seq desc)
-        [:p {:class "text-[10px] sm:text-xs text-slate-400 mt-0.5 line-clamp-1"} desc])]]))
+  [section-id {:keys [title desc icon] :as item}]
+  [action-wrapper item section-id
+   [:div {:class "flex flex-col justify-between min-h-[90px] w-full"}
+    [:div {:class "flex items-center w-full mb-3"}
+     [:span {:class "text-3xl sm:text-4xl"} icon]]
+    [:div
+     [:h2 {:class "text-xs sm:text-sm font-bold text-slate-100"} title]
+     (when (seq desc)
+       [:p {:class "text-[10px] sm:text-xs text-slate-400 mt-0.5 line-clamp-1"} desc])]]])
 
-(defmethod render-element :stepper
-  [section-id {:keys [id title desc icon actions]}]
-  (let [btn-id (when id (keyword id))]
-    [:div {:class "flex flex-col justify-between p-2.5 sm:p-3 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl overflow-hidden"}
-     ;; Optional Header Action
-     [:button
-      {:on-click #(when btn-id (ws/send-action! [section-id btn-id]))
-       :disabled (nil? btn-id)
-       :class (str "flex items-center justify-between p-2 rounded-xl text-left touch-manipulation select-none w-full transition-colors "
-                   (if btn-id
-                     "hover:bg-slate-800/60 active:bg-slate-800 cursor-pointer group mb-1.5"
-                     "cursor-default mb-1.5"))}
-      [:div {:class "pr-1 min-w-0"}
-       [:h2 {:class "text-xs sm:text-sm font-bold text-slate-100 truncate"} title]
-       (when (seq desc)
-         [:p {:class "text-[10px] sm:text-xs text-slate-400 truncate"} desc])]
-      (when (seq icon)
-        [:span {:class "text-lg opacity-85 group-active:scale-110 transition-transform flex-shrink-0 ml-1"} icon])]
-
-     ;; Sub-Actions
-     [:div {:class "grid grid-cols-2 gap-1.5 w-full"}
-      (for [act actions
-            :let [act-id (keyword (or (:id act) (:action act)))
-                  cmd-path (if btn-id
-                             [section-id btn-id act-id]
-                             [section-id act-id])]]
-        ^{:key (str act-id)}
-        [:button
-         {:on-click #(ws/send-action! cmd-path)
-          :class "flex items-center justify-center gap-1.5 py-3 sm:py-3.5 min-h-[52px] bg-slate-800 hover:bg-slate-750 active:bg-blue-600 active:scale-95 rounded-xl border border-slate-700/80 text-slate-100 transition-all select-none touch-manipulation w-full"}
-         (when (:icon act) [:span {:class "text-lg sm:text-xl"} (:icon act)])
-         (when (:label act) [:span {:class "font-mono font-bold text-xs"} (:label act)])])]]))
-
-(defmethod render-element :gauge
-  [section-id {:keys [title value unit]}]
-  [:div {:class "p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl col-span-2 flex flex-col items-center justify-center"}
-   [:h2 {:class "text-xs font-bold text-slate-400 mb-2"} title]
-   ;; Simple SVG semi-circle gauge or numerical display
-   [:div {:class "text-2xl font-mono font-bold text-blue-400"}
-    (str value unit)]])
+;; --- Pure Numerical Readout ---
+(defmethod render-element :metric
+  [section-id {:keys [title metric-key unit] :or {unit ""} :as item}]
+  (let [metric-val    (get-in @state/state [:telemetry metric-key])
+        formatted-val (if (number? metric-val)
+                        (str metric-val unit)
+                        "--")]
+    [action-wrapper item section-id
+     [:div {:class "flex flex-col justify-between min-h-[90px] w-full"}
+      [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase"} title]
+      [:div {:class "text-3xl font-mono font-extrabold text-slate-100 my-auto"}
+       formatted-val]]]))
 
 (defn resolve-status
   "Finds the applicable status keyword by checking metric-val 
