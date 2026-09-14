@@ -104,11 +104,11 @@ The following is an example (and just an example):
              :title "Home"
              :buttons [{:id :all-lights-off
                         :title "All Lights OFF"
-                        :desc "whole apartment"
+                        :desc "whole house"
                         :icon "💡"
                         :cmd {:type :mqtt
                               :topic "macro/all-lights-off"}}
-                       {:id :all-kimi-off
+                       {:id :all-kids-off
                         :title "Kids OFF"
                         :desc "lights and sockets"
                         :icon "💡"
@@ -116,7 +116,7 @@ The following is an example (and just an example):
                               :topic "macro/all-kids-off"}}
                        {:id :open-door
                         :title "Open Door"
-                        :desc "building front door"
+                        :desc "front door"
                         :icon "🚪"
                         :cmd {:type :mqtt
                               :topic "macro/open-door"}}
