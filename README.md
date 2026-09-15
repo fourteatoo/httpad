@@ -225,13 +225,22 @@ With such configuration, whenever you focus your Gimp window, HTTPAD
 will also switch to the Gimp section.  When you focus the Darktable
 window, HTTPS will also switch to the Darktable section.  And so on.
 
+
 ## Options
 
-None at the moment.  See the configuration file instead.
+    $ httpad -h
+
+	usage: httpad [option] ...
+	  -b, --launch-ui       Open the UI automatically in the browser
+	  -c, --config FILE     Use FILE as configuration instead of ~/.httpad
+	  -p, --port PORT       Port number
+	  -v, --verbose      0  Increase logging verbosity
+	  -h, --help            Show this
 
 ### Bugs
 
 To be expected.
+
 
 ## License
 
