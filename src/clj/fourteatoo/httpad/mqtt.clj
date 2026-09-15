@@ -28,26 +28,27 @@
   (when-let [mapping (get topic-config topic)]
     (let [payload (parse-payload message)]
       (cond
-        ;; Direct scalar mapping
-        (keyword? mapping)
-        (async/put! out-chan {:type :telemetry
-                              :metrics {mapping payload}})
-
+        ;; Direct scalar or path mapping (e.g., "stat/..." -> :washing-machine-state or [:kids-room-devices :light1])
+        (or (keyword? mapping) (vector? mapping))
+        (let [target-path (if (vector? mapping) mapping [mapping])]
+          (async/put! out-chan {:type    :telemetry
+                                :metrics (assoc-in {} target-path payload)}))
         ;; JSON key path extraction map
         (map? mapping)
         (if (map? payload)
-          (let [extracted-metrics (reduce (fn [acc [path metric-key]]
-                                           (if-let [val (get-in payload path)]
-                                             (assoc acc metric-key val)
-                                             acc))
-                                         {}
-                                         mapping)]
+          (let [extracted-metrics
+                (reduce (fn [acc [path metric-key]]
+                          (let [val (get-in payload path)]
+                            (if (some? val)
+                              (assoc-in acc (if (vector? metric-key) metric-key [metric-key]) val)
+                              acc)))
+                        {}
+                        mapping)]
             (when (seq extracted-metrics)
               (log/debugf "MQTT metrics [%s]: %s" topic extracted-metrics)
-              (async/put! out-chan {:type :telemetry
+              (async/put! out-chan {:type    :telemetry
                                     :metrics extracted-metrics})))
           (log/warnf "MQTT topic %s configured for JSON extraction, but payload was not a map: %s" topic payload))
-
         :else
         (log/warnf "Invalid topic configuration for %s: %s" topic mapping)))))
 
