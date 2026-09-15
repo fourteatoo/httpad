@@ -177,7 +177,7 @@ doing:
     $ httpad
 
 From your mobile device connect to http://yourcomputer:port/.  You
-should be asked an access password.
+should be asked for an access password.
 
 <img src="doc/15969.png" width="300" alt="login screen">
 
@@ -186,9 +186,8 @@ grid will appear.
 
 <img src="doc/15970.png" width="300" alt="desktop">
 
-At the top you can configure how many columns you wish to see (thus
-changing the geometry of the buttons).  Swiping to the left you can
-see the next section.
+At the top you can configure how big you wish to see your buttons.
+Swiping to the left you can see the next section.
 
 <img src="doc/15971.png" width="300" alt="home automation">
 
