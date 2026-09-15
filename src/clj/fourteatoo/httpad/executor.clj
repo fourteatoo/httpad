@@ -1,6 +1,6 @@
 (ns fourteatoo.httpad.executor
   (:require [clojure.java.shell :refer [sh]]
-            [clojure.tools.logging :as log]
+            [fourteatoo.httpad.log :as log]
             [fourteatoo.httpad.config :refer [config]]
             [fourteatoo.httpad.mqtt :as mqtt]))
 
@@ -35,8 +35,8 @@
   (let [{:keys [exit out err]} (sh "sh" "-c" command)]
     (if (zero? exit)
       (when-not (clojure.string/blank? out)
-        (log/debugf "Command '%s' stdout: %s" command out))
-      (log/errorf "Command '%s' failed (exit code %d): %s" command exit err))))
+        (log/debug (str "Command '" command "' stdout: " out)))
+      (log/error (str "Command '" command "' failed with exit code " exit ": " err)))))
 
 (defmethod execute-command nil
   [cmd]
@@ -49,13 +49,13 @@
    (execute action-id 400))
   ([action-id cooldown-ms]
    (if (rate-limited? action-id cooldown-ms)
-     (log/warnf "Rate limit hit for action '%s'. Dropping execution." action-id)
+     (log/warn "Rate limit hit for action" action-id)
      (if-let [cmd (lookup-command action-id)]
        ;; Future handles non-blocking execution off the http-kit worker thread
        (future
          (try
-           (log/infof "Executing command for %s: %s" action-id cmd)
+           (log/info "Executing command for" action-id ": " cmd)
            (execute-command cmd)
            (catch Exception e
-             (log/error e (format "Failed to dispatch command for %s" action-id)))))
-       (log/warnf "No command configured for action-id: %s" action-id)))))
+             (log/error e (str "Failed to dispatch command for" action-id)))))
+       (log/warn "No command configured for action-id" action-id)))))
