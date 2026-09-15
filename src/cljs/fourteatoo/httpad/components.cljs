@@ -1,7 +1,8 @@
 (ns fourteatoo.httpad.components
   (:require [reagent.core :as r]
             [fourteatoo.httpad.ws :as ws]
-            [fourteatoo.httpad.state :as state]))
+            [fourteatoo.httpad.state :as state]
+            [fourteatoo.httpad.util :as u]))
 
 (defn status-pill []
   (let [connected? (:ws-connected? @state/state)]
@@ -11,86 +12,81 @@
      [:span {:class "text-[11px] font-semibold text-slate-400 uppercase tracking-wider"}
       (if connected? "Connected" "Reconnecting")]]))
 
-(defn grid-scaler []
-  (let [cols (get-in @state/state [:layout :grid-cols] 6)]
-    [:div {:class "flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl p-1.5"}
-     [:button {:on-click #(swap! state/state update-in [:layout :grid-cols] (fn [n] (max 2 (dec (or n 6)))))
-               :class "p-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"} "-"]
-     [:span {:class "text-xs font-mono text-slate-400"} (str cols " cols")]
-     [:button {:on-click #(swap! state/state update-in [:layout :grid-cols] (fn [n] (min 12 (inc (or n 6)))))
-               :class "p-1 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"} "+"]]))
-;; EDN Example:
-;; {:type :gauge :id :cpu :title "CPU Load" :col-span 2 :row-span 1 :cmd true}
 (defn action-wrapper
-  "Wraps a widget with optional dynamic col/row spans."
+  "Wraps a widget with optional dynamic col/row spans and state-driven zoom sizing."
   [{:keys [id cmd class col-span row-span]} section-id content]
-  (let [has-cmd? (boolean cmd)
+  (let [zoom-id  (get-in @state/state [:layout :zoom-level] :medium)
+        has-cmd? (boolean cmd)
         cmd-path (when has-cmd? [section-id (keyword id)])
         col-span (or col-span 1)
-        row-span (or row-span 1)]
+        row-span (or row-span 1)
+        padding  (case zoom-id
+                   :small       "p-2.5"
+                   :medium      "p-3.5 sm:p-4"
+                   :large       "p-4 sm:p-5"
+                   :extra-large "p-5 sm:p-6"
+                   "p-4")
+        min-h    (case zoom-id
+                   :small       "min-h-[70px]"
+                   :medium      "min-h-[90px]"
+                   :large       "min-h-[120px]"
+                   :extra-large "min-h-[150px]"
+                   "min-h-[90px]")]
     [:div
      {:on-click (when has-cmd? #(ws/send-action! cmd-path))
       :style {:grid-column (str "span " col-span " / span " col-span)
               :grid-row    (str "span " row-span " / span " row-span)}
-      :class (str "relative flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl select-none transition-all "
+      :class (str "relative flex flex-col justify-between rounded-2xl bg-slate-900 border border-slate-800 shadow-xl select-none transition-all "
+                  padding " " min-h " "
                   (if has-cmd?
                     "active:scale-95 active:border-blue-500 touch-manipulation cursor-pointer"
                     "cursor-default")
                   " " class)}
-     
      (when has-cmd?
-       [:div {:class "absolute top-3 right-3 w-2 h-2 rounded-full bg-blue-500/50 shadow-[0_0_8px_rgba(59,130,246,0.5)]"}])
-     
+       [:div {:class "absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-blue-500/50 shadow-[0_0_8px_rgba(59,130,246,0.5)]"}])
      content]))
 
-
-#_
-(defn action-wrapper
-  "Wraps an element with touch/click interaction and a visual indicator 
-   if a command is attached."
-  [{:keys [id cmd class]} section-id content]
-  (let [has-cmd? (boolean cmd)
-        cmd-path (when has-cmd? [section-id id])]
-    [:div
-     {:on-click (when has-cmd? #(ws/send-action! cmd-path))
-      :class (str "relative flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl select-none transition-all "
-                  (if has-cmd?
-                    "active:scale-95 active:border-blue-500 touch-manipulation cursor-pointer"
-                    "cursor-default")
-                  " " class)}
-     
-     ;; The action indicator dot appears top-right for ANY widget with a :cmd
-     (when has-cmd?
-       [:div {:class "absolute top-3 right-3 w-2 h-2 rounded-full bg-blue-500/50 shadow-[0_0_8px_rgba(59,130,246,0.5)]"}])
-     
-     content]))
-
-;; --- Multimethod Element Renderer ---
 (defmulti render-element (fn [section-id item] (or (:type item) :button)))
 
-;; --- Standard Button / Action Card ---
 (defmethod render-element :button
   [section-id {:keys [title desc icon] :as item}]
-  [action-wrapper item section-id
-   [:div {:class "flex flex-col justify-between min-h-[90px] w-full"}
-    [:div {:class "flex items-center w-full mb-3"}
-     [:span {:class "text-3xl sm:text-4xl"} icon]]
-    [:div
-     [:h2 {:class "text-xs sm:text-sm font-bold text-slate-100"} title]
-     (when (seq desc)
-       [:p {:class "text-[10px] sm:text-xs text-slate-400 mt-0.5 line-clamp-1"} desc])]]])
+  (let [zoom-id    (get-in @state/state [:layout :zoom-level] :medium)
+        title-size (case zoom-id
+                     :small       "text-[11px]"
+                     :medium      "text-xs sm:text-sm"
+                     :large       "text-sm sm:text-base"
+                     :extra-large "text-base sm:text-lg"
+                     "text-xs sm:text-sm")
+        icon-size  (case zoom-id
+                     :small       "text-xl"
+                     :medium      "text-2xl sm:text-3xl"
+                     :large       "text-3xl sm:text-4xl"
+                     :extra-large "text-4xl sm:text-5xl"
+                     "text-3xl")]
+    [action-wrapper item section-id
+     [:div {:class "flex flex-col justify-between h-full w-full"}
+      [:div {:class "flex items-center w-full mb-1.5"}
+       [:span {:class icon-size} icon]]
+      [:div
+       [:h2 {:class (str title-size " font-bold text-slate-100 leading-tight")} title]
+       (when (and (seq desc) (not= zoom-id :small))
+         [:p {:class "text-[10px] sm:text-xs text-slate-400 mt-0.5 line-clamp-1"} desc])]]]))
 
-;; --- Pure Numerical Readout ---
 (defmethod render-element :metric
   [section-id {:keys [title metric-key unit] :or {unit ""} :as item}]
-  (let [metric-val    (get-in @state/state [:telemetry metric-key])
-        formatted-val (if (number? metric-val)
-                        (str metric-val unit)
-                        "--")]
+  (let [zoom-id       (get-in @state/state [:layout :zoom-level] :medium)
+        metric-val   (get-in @state/state [:telemetry metric-key])
+        formatted-val (if (number? metric-val) (str metric-val unit) "--")
+        val-size     (case zoom-id
+                       :small       "text-lg"
+                       :medium      "text-2xl"
+                       :large       "text-3xl"
+                       :extra-large "text-4xl sm:text-5xl"
+                       "text-2xl")]
     [action-wrapper item section-id
-     [:div {:class "flex flex-col justify-between min-h-[90px] w-full"}
+     [:div {:class "flex flex-col justify-between h-full w-full"}
       [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase"} title]
-      [:div {:class "text-3xl font-mono font-extrabold text-slate-100 my-auto"}
+      [:div {:class (str val-size " font-mono font-extrabold text-slate-100 my-auto")}
        formatted-val]]]))
 
 (defn resolve-status
@@ -105,10 +101,10 @@
             thresholds))
     :ok))
 
-;; --- Linear Progress Bar + Status ---
 (defmethod render-element :bar
   [section-id {:keys [title metric-key levels unit] :or {unit "%"} :as item}]
-  (let [metric-val     (get-in @state/state [:telemetry metric-key])
+  (let [zoom-id        (get-in @state/state [:layout :zoom-level] :medium)
+        metric-val     (get-in @state/state [:telemetry metric-key])
         current-val    (or metric-val 0)
         current-status (resolve-status current-val levels)
         formatted-val  (if (number? metric-val)
@@ -119,13 +115,35 @@
                          100)
         pct-fill       (if (number? metric-val)
                          (min 100 (max 0 (* (/ current-val max-threshold) 100)))
-                         0)]
+                         0)
+        
+        ;; Scaling parameters based on zoom level
+        val-size       (case zoom-id
+                         :small       "text-lg"
+                         :medium      "text-2xl"
+                         :large       "text-3xl"
+                         :extra-large "text-4xl sm:text-5xl"
+                         "text-2xl")
+        
+        bar-height     (case zoom-id
+                         :small       "h-1"
+                         :medium      "h-1.5"
+                         :large       "h-2"
+                         :extra-large "h-3"
+                         "h-1.5")
+        
+        title-size     (case zoom-id
+                         :small       "text-[9px]"
+                         :medium      "text-[10px]"
+                         :large       "text-xs"
+                         :extra-large "text-sm"
+                         "text-[10px]")]
     [action-wrapper item section-id
-     [:div {:class "flex flex-col justify-between min-h-[90px] w-full"}
-      [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase"} title]
-      [:div {:class "text-3xl font-mono font-extrabold text-slate-100 my-1"}
+     [:div {:class "flex flex-col justify-between h-full w-full"}
+      [:span {:class (str title-size " font-bold tracking-wider text-slate-500 uppercase")} title]
+      [:div {:class (str val-size " font-mono font-extrabold text-slate-100 my-1")}
        formatted-val]
-      [:div {:class "w-full bg-slate-800 h-1.5 rounded-full overflow-hidden"}
+      [:div {:class (str "w-full bg-slate-800 rounded-full overflow-hidden " bar-height)}
        [:div {:class (str "h-full transition-all duration-500 "
                           (case current-status
                             :critical "bg-rose-500"
@@ -145,10 +163,32 @@
         large-arc (if (<= (- end-angle start-angle) 180) "0" "1")]
     (str "M " sx " " sy " A " radius " " radius " 0 " large-arc " 0 " ex " " ey)))
 
+(defn gauge-view [pct angle stroke-color formatted-val]
+  ;; Relative container locks the absolute text label to this gauge block only
+  [:div {:class "relative w-full flex flex-col items-center justify-center my-auto overflow-hidden"}
+   [:svg {:viewBox "0 0 100 44"
+          :preserveAspectRatio "xMidYMid meet"
+          :class "w-full h-auto max-h-20 block overflow-visible"}
+    ;; Background Track
+    [:path {:d (describe-arc 50 40 34 -90 90)
+            :fill "none"
+            :stroke "#1e293b"
+            :stroke-width "7"
+            :stroke-linecap "round"}]
+    ;; Active Value Arc
+    (when (> pct 0)
+      [:path {:d (describe-arc 50 40 34 -90 angle)
+              :fill "none"
+              :stroke stroke-color
+              :stroke-width "7"
+              :stroke-linecap "round"
+              :class "transition-all duration-500"}])]
 
-;; --- Radial Gauge + Status ---
+   ;; Numeric Value anchored to the base of the cropped 100x44 viewBox
+   [:div {:class "absolute bottom-0 flex items-center justify-center text-center"}
+    [:span {:class "text-xl font-mono font-extrabold text-slate-100 tracking-tight leading-none"}
+     formatted-val]]])
 
-;; --- Radial Gauge (Cleaned Layout & Corrected Brackets) ---
 (defmethod render-element :gauge
   [section-id {:keys [title metric-key levels unit] :or {unit "%"} :as item}]
   (let [metric-val     (get-in @state/state [:telemetry metric-key])
@@ -166,80 +206,16 @@
         formatted-val  (if (number? metric-val) (str metric-val unit) "--")]
 
     [action-wrapper item section-id
-     [:div {:class "flex flex-col items-center justify-between min-h-[140px] w-full pt-1"}
+     ;; Removed min-h-[140px] so the card matches the grid's natural row height
+     [:div {:class "flex flex-col items-center justify-between h-full w-full pt-1 overflow-hidden"}
       
       ;; Category / Title
       [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase self-start mb-1"} 
        title]
       
       ;; Arc + Center Readout Container
-      [:div {:class "relative flex flex-col items-center justify-center my-auto w-full"}
-       
-       ;; SVG ViewBox cropped tightly (100x44) to remove blank bottom space
-       [:svg {:viewBox "0 0 100 44" :class "w-40 h-20 overflow-visible"}
-        ;; Background Track
-        [:path {:d (describe-arc 50 40 34 -90 90)
-                :fill "none"
-                :stroke "#1e293b"
-                :stroke-width "7"
-                :stroke-linecap "round"}]
-        ;; Active Value Arc
-        (when (> pct 0)
-          [:path {:d (describe-arc 50 40 34 -90 angle)
-                  :fill "none"
-                  :stroke stroke-color
-                  :stroke-width "7"
-                  :stroke-linecap "round"
-                  :class "transition-all duration-500"}])]
+      [gauge-view pct angle stroke-color formatted-val]]]))
 
-       ;; Numeric Value centered inside the arc curve (inside the relative div)
-       [:div {:class "absolute bottom-0 flex items-center justify-center text-center"}
-        [:span {:class "text-2xl font-mono font-extrabold text-slate-100 tracking-tight leading-none"}
-         formatted-val]]]]]))
-
-
-#_
-(defmethod render-element :gauge
-  [section-id {:keys [title metric-key levels unit] :or {unit "%"} :as item}]
-  (let [metric-val     (get-in @state/state [:telemetry metric-key])
-        current-val    (or metric-val 0)
-        current-status (resolve-status current-val levels)
-        
-        pct            (min 100 (max 0 current-val))
-        angle          (- (* (/ pct 100) 180) 90)
-        
-        stroke-color   (case current-status
-                         :critical "#f43f5e"
-                         :warning  "#fbbf24"
-                         "#34d399")]
-
-    [action-wrapper item section-id
-     [:div {:class "flex flex-col items-center justify-between min-h-[140px] w-full"}
-      [:span {:class "text-[10px] font-bold tracking-wider text-slate-500 uppercase self-start"} title]
-      
-      [:div {:class "relative flex items-center justify-center my-1"}
-       [:svg {:viewBox "0 0 100 55" :class "w-36 h-20"}
-        [:path {:d (describe-arc 50 50 40 -90 90)
-                :fill "none"
-                :stroke "#1e293b"
-                :stroke-width "8"
-                :stroke-linecap "round"}]
-        (when (> pct 0)
-          [:path {:d (describe-arc 50 50 40 -90 angle)
-                  :fill "none"
-                  :stroke stroke-color
-                  :stroke-width "8"
-                  :stroke-linecap "round"
-                  :class "transition-all duration-500"}])]]
-       
-      [:div {:class "absolute bottom-0 text-center"}
-       [:span {:class "text-2xl font-mono font-extrabold text-slate-100"}
-        (if (number? metric-val) (str metric-val unit) "--")]]
-      
-      [:span {:class "text-[10px] font-mono text-slate-500"}
-       (str "STATUS: " (name current-status))]]]))
-
-;; --- Multi-action Stepper Control ---
 (defmethod render-element :stepper
   [section-id {:keys [title desc icon actions] :as item}]
   [action-wrapper item section-id
@@ -272,41 +248,88 @@
         (when (:label act) [:span {:class "font-mono font-bold text-xs"} (:label act)])])]]])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-(defn section-view [{:keys [id title columns buttons]}]
-  (let [sec-id      (keyword id)
-        global-cols (get-in @state/state [:layout :grid-cols] 6)
-        cols        (or columns global-cols)]
-    [:section {:class "col-span-full"}
-     (when (seq title)
-       [:div {:class "sticky top-0 z-10 -mx-4 px-4 py-2.5 bg-slate-950/85 backdrop-blur-md border-b border-slate-800/80 flex items-center gap-3 select-none mb-3"}
-        [:span {:class "text-xs font-bold tracking-wider uppercase text-slate-400"} title]
-        [:div {:class "h-[1px] flex-grow bg-slate-800/80"}]])
+(comment
+  (swap! state/state assoc-in [:layout :zoom-level] :medium))
 
-     ;; Grid container with dynamic column count & gap
-     [:div {:class "grid"
-            :style {:grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")
-                    :gap "1rem"}}
-      (for [b buttons
-            :let [b-key (or (:id b) (:title b))]]
-        ^{:key (str b-key)}
-        [render-element sec-id b])]]))
+(def ^:private zoom-presets-list
+  [{:id :small
+    :label "S"
+    :min-width 100
+    :height "h-16"
+    :text-size "text-xs"}
+   {:id :medium
+    :label "M"
+    :min-width 150
+    :height "h-24"
+    :text-size "text-sm"}
+   {:id :large
+    :label "L"
+    :min-width 220
+    :height "h-32"
+    :text-size "text-base"}
+   {:id :extra-large
+    :label "XL"
+    :min-width 310
+    :height "h-40"
+    :text-size "text-lg"}])
 
-#_
+(def zoom-presets
+  (let [padded (concat [nil] zoom-presets-list [nil])]
+    (into {}
+          (map (fn [[prev curr next]]
+                 [(:id curr) (assoc curr :prev prev :next next)]))
+          (partition 3 1 padded))))
+
+(defn- get-zoom-preset [id]
+  (or (get zoom-presets id)
+      (get zoom-presets (get-in zoom-presets-list [1 :id]))))
+
+(defn- step-zoom [current-id dir]
+  (let [current (get-zoom-preset current-id)]
+    (:id (or (case dir
+               :dec (:prev current)
+               :inc (:next current))
+             current))))
+
 (defn section-view [{:keys [id title buttons]}]
-  (let [sec-id (keyword id)]
-    [:section {:class "col-span-full"}
+  (let [sec-id  (keyword id)
+        zoom-id (get-in @state/state [:layout :zoom-level] :medium)
+        preset  (get-zoom-preset zoom-id)
+        min-px  (:min-width preset)]
+    [:section {:class "w-full col-span-full mb-6 snap-none overflow-x-hidden"}
      (when (seq title)
-       [:div {:class "sticky top-0 z-10 -mx-4 px-4 py-2.5 bg-slate-950/85 backdrop-blur-md border-b border-slate-800/80 flex items-center gap-3 select-none mb-3"}
+       ;; Removed -mx-4 px-4 to prevent sub-pixel layout width expansion
+       [:div {:class "sticky top-0 z-10 py-2 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 flex items-center gap-3 select-none mb-3"}
         [:span {:class "text-xs font-bold tracking-wider uppercase text-slate-400"} title]
         [:div {:class "h-[1px] flex-grow bg-slate-800/80"}]])
 
-     [:div {:class "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4"}
+     [:div {:class "grid snap-none w-full"
+            :style {:grid-template-columns (str "repeat(auto-fill, minmax(" min-px "px, 1fr))")
+                    :gap "0.75rem"}}
       (for [b buttons
             :let [b-key (or (:id b) (:title b))]]
         ^{:key (str b-key)}
         [render-element sec-id b])]]))
+
+(defn zoom-scaler
+  "Stepper control adjusting minimum button tile size safely."
+  []
+  (let [current (get-in @state/state [:layout :zoom-level] :medium)]
+    [:div {:class "flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl p-1"}
+     [:button {:type "button"
+               :on-click #(swap! state/state update-in [:layout :zoom-level] step-zoom :dec)
+               :class "p-1 px-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"} "-"]
+     [:span {:class "text-xs font-mono text-slate-400 capitalize w-6 text-center select-none"} 
+      (:label (get-zoom-preset current))]
+     [:button {:type "button"
+               :on-click #(swap! state/state update-in [:layout :zoom-level] step-zoom :inc)
+               :class "p-1 px-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold"} "+"]]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn login-screen []
   [:div {:class "min-h-screen bg-slate-950 flex items-center justify-center p-4"}
@@ -347,6 +370,19 @@
                      "bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"))}
       (:title sec)])])
 
+(defn section-dots
+  "Renders static pagination dots for mobile screens."
+  [sections active-id]
+  [:div {:class "flex sm:hidden justify-center items-center gap-2 py-3 flex-shrink-0 w-full z-10"}
+   (for [sec sections
+         :let [sec-id (keyword (:id sec))
+               active? (= sec-id active-id)]]
+     ^{:key (str sec-id)}
+     [:div {:class (str "rounded-full transition-all duration-200 "
+                        (if active?
+                          "w-2.5 h-2.5 bg-blue-500"
+                          "w-2 h-2 bg-slate-700"))}])])
+
 (defn global-styles []
   [:style
    ".no-scrollbar::-webkit-scrollbar { display: none; }
@@ -363,13 +399,8 @@
         (when-not (= sec-id (:active-tab @state/state))
           (swap! state/state assoc :active-tab sec-id))))))
 
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-
 
 (defn scroll-container-to-index!
   "Programmatically scrolls the main mobile snap container to the tab index."
@@ -380,14 +411,12 @@
             target-left     (* idx container-width)]
         (.scrollTo main-el #js {:left target-left :behavior "smooth"})))))
 
-
-
 (defn- header-component []
   [:header {:class "flex items-center justify-between mb-4 flex-shrink-0"}
    [:div
     [:h1 {:class "text-base font-bold tracking-widest text-slate-200 uppercase"} "HTTPAD"]
     [:p {:class "text-[11px] text-slate-500 font-mono"} "a web-based macropad"]]
-   [grid-scaler][status-pill]])
+   [zoom-scaler][status-pill]])
 
 (defn dashboard []
   (let [main-ref (atom nil)
