@@ -458,14 +458,17 @@
         (let [sections  (:sections @state/state)
               active-id (or (:active-tab @state/state)
                             (some-> (first sections) :id keyword))]
-          [:div {:class "min-h-screen h-screen flex flex-col justify-between bg-slate-950 text-slate-100 p-4"}
+          ;; Lock total root view to exactly viewport height
+          [:div {:class "h-[100dvh] flex flex-col justify-between bg-slate-950 text-slate-100 p-4 pb-6 overflow-hidden"}
            [header-component]
            [tab-header sections active-id #(swap! state/state assoc :active-tab %)]
 
+           ;; Horizontal snap container (takes all remaining height, zero flex-shrink)
            [:main {:ref #(reset! main-ref %)
-                   :class "flex-1 w-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"}
+                   :class "flex-1 min-h-0 w-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar overflow-y-hidden"}
             (for [sec sections
                   :let [sec-id (keyword (:id sec))]]
               ^{:key (str sec-id)}
-              [:div {:class "w-full min-w-full flex-shrink-0 snap-center px-1"}
-               [section-view sec]])]]))})))
+              [:div {:class "w-full min-w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden overscroll-y-contain no-scrollbar"}
+               [section-view sec]])]
+
