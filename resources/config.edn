@@ -1,3 +1,5 @@
 {:port 8088
  :auth-token "CHANGE_ME_IN_USER_HOME"
+ :logging {:level   :info
+           :console true}
  :sections []}
