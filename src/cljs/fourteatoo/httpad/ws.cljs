@@ -62,6 +62,7 @@
   (when-let [old-ws @ws-conn]
     (when (or (= (.-readyState old-ws) js/WebSocket.OPEN)
               (= (.-readyState old-ws) js/WebSocket.CONNECTING))
+      (set! (.-onclose old-ws) nil)
       (.close old-ws)))
 
   (let [host (.. js/window -location -host)
@@ -73,6 +74,7 @@
       (fn [evt]
         (try
           (js/console.log "WS Open successfully")
+          (reset! reconnect-delay 1000)
           (swap! state/state assoc :ws-connected? true)
           ;; If you send an initial token or subscribe message, wrap it here:
           ;; (send-ws-message! {:type :init})
