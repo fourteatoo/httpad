@@ -445,6 +445,93 @@
     [:p {:class "text-[11px] text-slate-500 font-mono"} "a web-based macropad"]]
    [zoom-scaler][status-pill]])
 
+
+(defn cycle-tab! [direction]
+  (let [sections (:sections @state/state)
+        sec-ids  (mapv #(keyword (:id %)) sections)
+        curr-id  (or (:active-tab @state/state) (first sec-ids))
+        idx      (.indexOf sec-ids curr-id)
+        cnt      (count sec-ids)]
+    (when (and (seq sec-ids) (>= idx 0))
+      (let [next-idx (case direction
+                       :left  (max 0 (dec idx))
+                       :right (min (dec cnt) (inc idx)))
+            target   (nth sec-ids next-idx)]
+        (when-not (= target curr-id)
+          (swap! state/state assoc :active-tab target))))))
+
+(defn scroll-to-tab! [main-el tab-id sections]
+  (when main-el
+    (let [sec-ids (mapv #(keyword (:id %)) sections)
+          idx     (.indexOf sec-ids tab-id)]
+      (when (>= idx 0)
+        (let [target-left (* idx (.-clientWidth main-el))]
+          (.scrollTo main-el #js {:left target-left :behavior "smooth"}))))))
+
+(defn dashboard []
+  (let [main-el-atom (atom nil)
+        
+        handle-scroll
+        (fn [e]
+          (let [target      (.-target e)
+                scroll-left (.-scrollLeft target)
+                width       (.-clientWidth target)]
+            (when (> width 0)
+              (let [idx      (js/Math.round (/ scroll-left width))
+                    sections (:sections @state/state)
+                    sec      (nth sections idx nil)]
+                (when-let [sec-id (some-> sec :id keyword)]
+                  (when-not (= sec-id (:active-tab @state/state))
+                    (swap! state/state assoc :active-tab sec-id)))))))
+
+        handle-tab-click
+        (fn [tab-id sections]
+          (swap! state/state assoc :active-tab tab-id)
+          (scroll-to-tab! @main-el-atom tab-id sections))
+
+        handle-keydown
+        (fn [e]
+          (case (.-key e)
+            "ArrowLeft"  (do (.preventDefault e) 
+                             (cycle-tab! :left)
+                             (scroll-to-tab! @main-el-atom (:active-tab @state/state) (:sections @state/state)))
+            "ArrowRight" (do (.preventDefault e) 
+                             (cycle-tab! :right)
+                             (scroll-to-tab! @main-el-atom (:active-tab @state/state) (:sections @state/state)))
+            nil))]
+
+    (r/create-class
+     {:displayName "Dashboard"
+
+      :component-did-mount
+      (fn [_]
+        (js/window.addEventListener "keydown" handle-keydown))
+
+      :component-will-unmount
+      (fn [_]
+        (js/window.removeEventListener "keydown" handle-keydown))
+
+      :reagent-render
+      (fn []
+        (let [sections  (:sections @state/state)
+              active-id (or (:active-tab @state/state)
+                            (some-> (first sections) :id keyword))]
+          [:div {:class "h-[100dvh] flex flex-col justify-between bg-slate-950 text-slate-100 p-4 pb-6 overflow-hidden"}
+           [header-component]
+           [tab-header sections active-id #(handle-tab-click % sections)]
+
+           [:main {:ref #(reset! main-el-atom %)
+                   :on-scroll handle-scroll
+                   :class "flex-1 min-h-0 w-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar overflow-y-hidden"}
+            (for [sec sections
+                  :let [sec-id (keyword (:id sec))]]
+              ^{:key (str sec-id)}
+              [:div {:class "w-full min-w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden overscroll-y-contain no-scrollbar"}
+               [section-view sec]])]
+
+           [section-dots sections active-id]]))})))
+
+#_
 (defn dashboard []
   (let [main-ref (atom nil)
         prev-tab (atom nil)]
