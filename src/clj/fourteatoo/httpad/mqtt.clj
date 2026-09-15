@@ -78,11 +78,14 @@
 
     (deliveryComplete [_ _token] nil)))
 
+(defn make-client-id []
+  (str "httpad-"(random-uuid)))
+
 (defn start-subscriber! [mqtt-cfg out-chan]
   (let [{:keys [host port user password topics client-id]
          :or   {host "127.0.0.1"
                 port 1883
-                client-id "httpad-server"}} mqtt-cfg]
+                client-id (make-client-id)}} mqtt-cfg]
     (when (seq topics)
       (let [broker-url  (str "tcp://" host ":" port)
             persistence (MemoryPersistence.)
