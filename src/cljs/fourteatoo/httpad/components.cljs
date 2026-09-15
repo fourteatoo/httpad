@@ -13,13 +13,36 @@
       (if connected? "Connected" "Reconnecting")]]))
 
 (defn action-wrapper
-  "Wraps a widget with optional dynamic col/row spans and state-driven zoom sizing."
-  [{:keys [id cmd class col-span row-span]} section-id content]
+  "Wraps a widget with dynamic col/row spans, zoom sizing, and optional state/action indicator dots."
+  [{:keys [id cmd state class col-span row-span]} section-id content]
   (let [zoom-id  (get-in @state/state [:layout :zoom-level] :medium)
         has-cmd? (boolean cmd)
         cmd-path (when has-cmd? [section-id (keyword id)])
         col-span (or col-span 1)
         row-span (or row-span 1)
+        ;; State evaluation logic
+        state-key     (:key state)
+        raw-val       (when state-key (get-in @state/state [:telemetry state-key]))
+        mapping       (:mapping state)
+        ;; Resolve mapped status keyword (e.g., :on or :off) or fallback to raw value
+        mapped-status (get mapping raw-val raw-val)
+        ;; Determine indicator dot styling based on presence of cmd & state
+        dot-classes (cond
+                      ;; 1. Active state = :on -> Amber glow
+                      (= mapped-status :on)
+                      "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]"
+
+                      ;; 2. Active state = :off -> Slate/Gray dot
+                      (= mapped-status :off)
+                      "bg-slate-600/60 shadow-none"
+
+                      ;; 3. No state config, but clickable -> Default Blue dot
+                      has-cmd?
+                      "bg-blue-500/50 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+
+                      ;; 4. Non-interactive & no state -> No dot
+                      :else nil)
+
         padding  (case zoom-id
                    :small       "p-2.5"
                    :medium      "p-3.5 sm:p-4"
@@ -42,8 +65,12 @@
                     "active:scale-95 active:border-blue-500 touch-manipulation cursor-pointer"
                     "cursor-default")
                   " " class)}
-     (when has-cmd?
-       [:div {:class "absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-blue-500/50 shadow-[0_0_8px_rgba(59,130,246,0.5)]"}])
+     
+     ;; Render status dot when either an action or state tracking is configured
+     (when dot-classes
+       [:div {:class (str "absolute top-2.5 right-2.5 w-2 h-2 rounded-full transition-all duration-300 "
+                          dot-classes)}])
+     
      content]))
 
 (defmulti render-element (fn [section-id item] (or (:type item) :button)))
