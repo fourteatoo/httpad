@@ -2,7 +2,7 @@
   (:require [clojure.core.async :as a]
             [clojure.java.shell :as shell]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]
+            [fourteatoo.httpad.log :as log]
             [mount.core :refer [defstate]]))
 
 ;; -----------------------------------------------------------------------------
@@ -83,12 +83,12 @@
 (defstate telemetry-runners
   :start
   (do
-    (log/info "Starting system telemetry sampler loops...")
+    (log/info "Starting system telemetry samplers")
     [(start-sampler 1000 #(hash-map :cpu-load (sample-cpu)
                                     :mem-used (sample-memory)))
      (start-sampler 10000 #(hash-map :disk-free 72))])
   
   :stop
   (do
-    (log/info "Stopping system telemetry sampler loops...")
+    (log/info "Stopping system telemetry samplers")
     (run! stop-sampler telemetry-runners)))
