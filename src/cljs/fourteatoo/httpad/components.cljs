@@ -472,3 +472,5 @@
               [:div {:class "w-full min-w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden overscroll-y-contain no-scrollbar"}
                [section-view sec]])]
 
+           ;; Fixed at the bottom of the screen
+           [section-dots sections active-id]]))})))
