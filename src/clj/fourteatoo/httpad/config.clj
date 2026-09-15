@@ -27,9 +27,24 @@
             sections)
        (into {})))
 
+;; should be rebound with the CLI options in the main function
+(def ^:dynamic options {})
+
 (defstate config
   :start (let [override-file (str (user-home) "/.httpad")
                cfg (load-config
                     :resource "config.edn"
                     :file override-file)]
            (assoc cfg :action-index (extract-action-index (:sections cfg)))))
+
+(defn conf [& args]
+  (get-in config args))
+
+(defn opt [& args]
+  (get-in options args))
+
+(defn port []
+  (or (opt :port)
+      (conf :port)
+      8080))
+
