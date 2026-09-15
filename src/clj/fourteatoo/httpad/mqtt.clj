@@ -2,7 +2,7 @@
   (:require [cheshire.core :as json]
             [clojure.core.async :as async]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]
+            [fourteatoo.httpad.log :as log]
             [fourteatoo.httpad.config :refer [config]]
             [fourteatoo.httpad.telemetry :as telemetry]
             [mount.core :refer [defstate]])
@@ -45,28 +45,27 @@
                         {}
                         mapping)]
             (when (seq extracted-metrics)
-              (log/debugf "MQTT metrics [%s]: %s" topic extracted-metrics)
-              (async/put! out-chan {:type    :telemetry
+              (log/debug "MQTT metrics " topic ": " extracted-metrics)
+              (async/put! out-chan {:type :telemetry
                                     :metrics extracted-metrics})))
-          (log/warnf "MQTT topic %s configured for JSON extraction, but payload was not a map: %s" topic payload))
+          (log/warn "MQTT topic" topic "configured for JSON extraction, but payload was not a map:" payload))
         :else
-        (log/warnf "Invalid topic configuration for %s: %s" topic mapping)))))
+        (log/warn "Invalid topic configuration for" topic ": " mapping)))))
 
 (defn- create-callback [^MqttClient client topic-config out-chan]
   (reify MqttCallbackExtended
     (connectionLost [_ cause]
-      (log/warnf "MQTT connection lost: %s. Paho auto-reconnect will attempt recovery..." 
-                 (some-> cause .getMessage)))
+      (log/warn "MQTT connection lost:" (some-> cause .getMessage)))
 
     (connectComplete [_ reconnect server-uri]
       (if reconnect
-        (log/infof "MQTT reconnected to %s. Resubscribing to topics..." server-uri)
-        (log/infof "MQTT initial connection established to %s." server-uri))
+        (log/info "MQTT reconnected to" server-uri)
+        (log/info "MQTT initial connection established to" server-uri))
       
       ;; CRITICAL: Resubscribe to all configured topics on every connect/reconnect
       (try
         (doseq [topic (keys topic-config)]
-          (log/infof "Subscribing to MQTT topic: %s" topic)
+          (log/info "Subscribing to MQTT topic" topic)
           (.subscribe client topic 0))
         (catch Exception e
           (log/error e "Failed to subscribe to MQTT topics after reconnect"))))
@@ -99,14 +98,14 @@
         ;; Set callback BEFORE connect so connectComplete handles initial subscriptions too
         (.setCallback client (create-callback client topics out-chan))
         
-        (log/infof "Connecting MQTT client to broker at %s..." broker-url)
+        (log/info "Connecting MQTT client to broker at" broker-url)
         (.connect client options)
 
         client))))
 
 (defn stop-subscriber! [^MqttClient client]
   (when (and client (.isConnected client))
-    (log/info "Disconnecting MQTT subscriber...")
+    (log/info "Disconnecting MQTT subscriber")
     (try
       (.disconnect client)
       (.close client)
@@ -124,15 +123,16 @@
                                          "UTF-8"))]
         (.setQos msg 1)
         (.publish client topic msg)
-        (log/debugf "Published MQTT message to %s: %s" topic payload))
+        (log/debug "Published MQTT message to" topic ": " payload))
       (catch Exception e
         (log/error e "Failed to publish MQTT message to topic:" topic)))
-    (log/warnf "Cannot publish to %s: MQTT client is disconnected" topic)))
+    (log/warn "Cannot publish to" topic)))
 
 (defstate mqtt-subscriber
   :start (when-let [mqtt-cfg (:mqtt config)]
            (when (:enabled mqtt-cfg true)
-             (log/info "Initializing MQTT subscriber component...")
+             (log/info "Initializing MQTT subscriber")
              (start-subscriber! mqtt-cfg telemetry/telemetry-chan)))
   :stop  (when-let [client mqtt-subscriber]
+           (log/info "Stopping MQTT subscriber")
            (stop-subscriber! client)))
