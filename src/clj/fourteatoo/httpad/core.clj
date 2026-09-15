@@ -7,7 +7,6 @@
    [fourteatoo.httpad.log :as log]
    [fourteatoo.httpad.network :as network]
    [fourteatoo.httpad.server]
-   [fourteatoo.httpad.focus]
    [mount.core :as mount]
    [fourteatoo.httpad.rt :as rt]))
 
