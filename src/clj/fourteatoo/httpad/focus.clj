@@ -2,10 +2,11 @@
   (:require [clojure.core.async :as async]
             [fourteatoo.httpad.process :as proc]
             [fourteatoo.httpad.config :refer [config]]
-            [mount.core :as mount]
+            [mount.core :as mount :refer [defstate]]
             [fourteatoo.httpad.telemetry :as telemetry]
             [clojure.java.shell :as shell]
-            [clojure.string :as s]))
+            [clojure.string :as s]
+            [fourteatoo.httpad.log :as log]))
 
 
 (def window-id-regex #"_NET_ACTIVE_WINDOW\(WINDOW\): window id # (0x[0-9a-fA-F]+)")
@@ -22,7 +23,7 @@
   (when-let [[_ id-hex] (re-find window-id-regex line)]
     id-hex))
 
-(defn update [target-id]
+(defn update-section [target-id]
   (telemetry/broadcast {:type :active-section 
                         :section target-id}))
 
@@ -54,22 +55,24 @@
     {:event-ch event-ch
      :stop stop}))
 
-(mount/defstate active-window-watcher
+(defstate active-window-watcher
   :start
   (let [{:keys [event-ch stop]} (start-active-window-watcher)]
+    (log/info "Starting focus watcher")
     ;; Consume window change events asynchronously
     (async/go-loop []
       (if-let [win (async/<! event-ch)]
         (do
-          (println "Active Window Changed:" win)
+          (log/debug "Active Window Changed:" win)
           ;; Forward to WebSocket client / App State
           (when-let [section-id (window-class->section-id (:class win))]
-            (update section-id))
+            (update-section section-id))
           (recur))
-        (println "XProp event channel closed.")))
+        (log/debug "XProp event channel closed.")))
     ;; Return state record with stop fn for Mount lifecycle teardown
     {:stop stop})
 
   :stop
   (when-let [stop (:stop active-window-watcher)]
+    (log/info "Stopping focus watcher")
     (stop)))
