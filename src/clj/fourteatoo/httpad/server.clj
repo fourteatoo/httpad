@@ -8,9 +8,9 @@
             [ring.middleware.params :refer [wrap-params]]
             [ring.middleware.keyword-params :refer [wrap-keyword-params]]
             [cheshire.core :as json]
-            [clojure.tools.logging :as log]
+            [fourteatoo.httpad.log :as log]
             [cognitect.transit :as transit]
-            [fourteatoo.httpad.config :refer [config]]
+            [fourteatoo.httpad.config :as c]
             [fourteatoo.httpad.executor :as executor]
             [clojure.core.async :as a :refer [go-loop <! >! timeout chan mult tap untap]]
             [fourteatoo.httpad.telemetry :as telemetry]
@@ -56,11 +56,11 @@
   (try
     (let [body (decode-transit (slurp (:body req)))
           submitted-pass (:passphrase body)
-          expected-pass   (:auth-token config)]
+          expected-pass   (:auth-token c/config)]
       (if (and (seq expected-pass) (= submitted-pass expected-pass))
         (let [session-id (str (java.util.UUID/randomUUID))]
           (swap! active-sessions conj session-id)
-          (log/infof "Successful authentication from IP: %s" (:remote-addr req))
+          (log/info "Successful authentication from IP" (:remote-addr req))
           (assoc-in (make-response {:status "ok"})
                     [:cookies "macropad_session"]
                     {:value session-id
@@ -69,7 +69,7 @@
                      :same-site :lax
                      :max-age 31536000}))
         (do
-          (log/warnf "Failed login attempt from IP: %s" (:remote-addr req))
+          (log/warn "Failed login attempt from IP:" (:remote-addr req))
           (make-response {:status "error" :message "Invalid Passphrase"} 401))))
     (catch Exception e
       (log/error e "Error processing login request")
@@ -104,7 +104,7 @@
   [req]
   (let [session-id (get-cookie req "macropad_session")]
     (if (and (seq session-id) (contains? @active-sessions session-id))
-      (make-response (sanitize-config config))
+      (make-response (sanitize-config c/config))
       (make-response {:status "error" :message "Unauthorized"} 401))))
 
 (defn ws-handler
@@ -116,7 +116,7 @@
       (http/as-channel req
         {:on-open
          (fn [ch]
-           (log/infof "Authenticated WebSocket connected from IP: %s" (:remote-addr req))
+           (log/info "Authenticated WebSocket connected from IP:" (:remote-addr req))
            (let [client-async-chan (a/chan (a/sliding-buffer 10))]
              
              ;; Register handles tapping the mult, updating active state, & pushing initial snapshot
@@ -142,11 +142,11 @@
 
          :on-close
          (fn [ch status]
-           (log/debugf "WebSocket channel closed (status: %s)" status)
+           (log/debug "WebSocket channel closed with status:" status)
            ;; Unregister handles untapping, channel closing, and atom removal
            (telemetry/unregister-client ch))})
       (do
-        (log/warnf "Rejected unauthenticated WebSocket attempt from IP: %s" (:remote-addr req))
+        (log/warn "Rejected unauthenticated WebSocket attempt from IP:" (:remote-addr req))
         {:status 403 :body "Forbidden"}))))
 
 (defn- logout-handler [req]
@@ -171,12 +171,12 @@
           target-id (focus/window-class->section-id win-name)]
       (if target-id
         (do
-          (focus/update target-id)
+          (focus/update-section target-id)
           {:status 200
            :headers {"Content-Type" "application/edn"}
            :body (pr-str {:status :ok})})
         (do
-          (log/debugf "No matching section for focused window '%s'" win-name)
+          (log/debug "No matching section for focused window" win-name)
           {:status 200
            :headers {"Content-Type" "application/edn"}
            :body (pr-str {:status :ignored})})))
@@ -210,8 +210,9 @@
       (wrap-content-type)))
 
 (defstate http-server
-  :start (let [port (:port config 8080)]
-           (log/infof "Starting Httpad server on port %d..." port)
+  :start (let [port (c/port)]
+           (log/info "Starting API server on port" port)
            (http/run-server handler {:port port :ip "0.0.0.0"}))
   :stop  (when http-server
+           (log/info "Shutting down API")
            (http-server :timeout 100)))
