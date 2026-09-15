@@ -44,10 +44,17 @@
              (.then (.text res) #(decode-transit %))
              (js/Promise.reject res)))))
 
+(defn deep-merge [a b]
+  (merge-with (fn [x y]
+                (if (and (map? x) (map? y))
+                  (deep-merge x y)
+                  y))
+              a b))
+
 (defn- handle-incoming-message [msg]
   (case (:type msg)
     :telemetry
-    (swap! state/state update :telemetry merge (:metrics msg))
+    (swap! state/state update :telemetry deep-merge (:metrics msg))
     
     :active-section
     (when (some #(= (keyword (:id %))
