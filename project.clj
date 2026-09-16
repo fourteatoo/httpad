@@ -24,6 +24,7 @@
                  [org.clojure/clojurescript "1.12.145"]
                  [ring-transit "0.1.6"]
                  [com.cognitect/transit-cljs "0.8.280"]
+                 [com.github.oshi/oshi-core "6.6.5"]
                  #_[org.slf4j/slf4j-simple "2.0.19"]]
 
   :plugins [#_[lein-cljsbuild "1.1.8"]
