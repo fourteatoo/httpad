@@ -3,11 +3,9 @@
             [clojure.java.shell :as shell]
             [clojure.string :as str]
             [fourteatoo.httpad.log :as log]
-            [mount.core :refer [defstate]]))
+            [mount.core :refer [defstate]]
+            [fourteatoo.httpad.oshi :as oshi]))
 
-;; -----------------------------------------------------------------------------
-;; 1. Private State & Channels
-;; -----------------------------------------------------------------------------
 
 (defonce active-clients (atom {}))
 (defonce latest-metrics (atom {}))
@@ -15,9 +13,6 @@
 (defonce telemetry-chan (a/chan (a/sliding-buffer 10)))
 (defonce telemetry-mult (a/mult telemetry-chan))
 
-;; -----------------------------------------------------------------------------
-;; 2. Client Lifecycle API
-;; -----------------------------------------------------------------------------
 
 (defn register-client
   "Registers a new WebSocket channel, taps it to the mult, and sends initial metrics."
@@ -42,24 +37,7 @@
   [event-map]
   (a/>!! telemetry-chan event-map))
 
-
-;; -----------------------------------------------------------------------------
-;; 3. Samplers & Loops
-;; -----------------------------------------------------------------------------
-
-(defn sample-cpu []
-  (try
-    (let [res (shell/sh "sh" "-c" "top -bn1 | grep 'Cpu(s)' | awk '{print $2}'")]
-      (Double/parseDouble (str/trim (:out res))))
-    (catch Exception _ 0.0)))
-
-(defn sample-memory []
-  (try
-    (let [res (shell/sh "sh" "-c" "free | grep Mem | awk '{print $3/$2 * 100.0}'")]
-      (Math/round (Double/parseDouble (str/trim (:out res)))))
-    (catch Exception _ 0)))
-
-(defn start-sampler [interval-ms metrics-fn]
+(defn- start-sampler [interval-ms metrics-fn]
   (let [stop-chan (a/chan)]
     (a/go-loop []
       (let [[_ port] (a/alts! [(a/timeout interval-ms) stop-chan])]
@@ -72,23 +50,28 @@
           (recur))))
     stop-chan))
 
-(defn stop-sampler [stop-chan]
+(defn- stop-sampler [stop-chan]
   (when stop-chan
     (a/close! stop-chan)))
 
-;; -----------------------------------------------------------------------------
-;; 4. Mount Lifecycle
-;; -----------------------------------------------------------------------------
+(defn- disk-free-stats []
+  (->> (oshi/filesystem-stats)
+       (reduce (fn [m vol]
+                 (assoc m (:mount vol) (Math/round (:used-pct vol))))
+               {})
+       (into {})))
+
+(defn- start-telemetry-runners []
+  (log/info "Starting system telemetry samplers")
+  [(start-sampler 1700 #(hash-map :cpu {:load (Math/round (oshi/cpu-load))
+                                        :temp (oshi/cpu-temperature)}
+                                  :mem-used (Math/round (:used-pct (oshi/memory-stats)))))
+   (start-sampler 13000 #(hash-map :disk-free (disk-free-stats)))])
+
+(defn- stop-telemetry-runners [telemetry-runners]
+  (log/info "Stopping system telemetry samplers")
+  (run! stop-sampler telemetry-runners))
 
 (defstate telemetry-runners
-  :start
-  (do
-    (log/info "Starting system telemetry samplers")
-    [(start-sampler 1000 #(hash-map :cpu-load (sample-cpu)
-                                    :mem-used (sample-memory)))
-     (start-sampler 10000 #(hash-map :disk-free 72))])
-  
-  :stop
-  (do
-    (log/info "Stopping system telemetry samplers")
-    (run! stop-sampler telemetry-runners)))
+  :start (start-telemetry-runners)
+  :stop (stop-telemetry-runners telemetry-runners))
