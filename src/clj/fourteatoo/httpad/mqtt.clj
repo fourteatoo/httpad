@@ -81,7 +81,7 @@
 (defn make-client-id []
   (str "httpad-"(random-uuid)))
 
-(defn start-subscriber! [mqtt-cfg out-chan]
+(defn- start-subscriber [mqtt-cfg out-chan]
   (let [{:keys [host port user password topics client-id]
          :or   {host "127.0.0.1"
                 port 1883
@@ -106,7 +106,7 @@
 
         client))))
 
-(defn stop-subscriber! [^MqttClient client]
+(defn- stop-subscriber [^MqttClient client]
   (when (and client (.isConnected client))
     (log/info "Disconnecting MQTT subscriber")
     (try
@@ -115,27 +115,21 @@
       (catch Exception e
         (log/error e "Error stopping MQTT client")))))
 
-(defn publish!
-  "Publishes a payload string to a given MQTT topic."
-  [^MqttClient client topic payload]
-  (if (and client (.isConnected client))
-    (try
-      (let [msg (MqttMessage. (.getBytes (if (map? payload)
-                                           (json/generate-string payload)
-                                           (str payload))
-                                         "UTF-8"))]
-        (.setQos msg 1)
-        (.publish client topic msg)
-        (log/debug "Published MQTT message to" topic ": " payload))
-      (catch Exception e
-        (log/error e "Failed to publish MQTT message to topic:" topic)))
-    (log/warn "Cannot publish to" topic)))
+(defstate mqtt-client
+  :start (when-let [cfg (:mqtt config)]
+           (start-subscriber cfg telemetry/telemetry-chan))
+  :stop (stop-subscriber mqtt-client))
 
-(defstate mqtt-subscriber
-  :start (when-let [mqtt-cfg (:mqtt config)]
-           (when (:enabled mqtt-cfg true)
-             (log/info "Initializing MQTT subscriber")
-             (start-subscriber! mqtt-cfg telemetry/telemetry-chan)))
-  :stop  (when-let [client mqtt-subscriber]
-           (log/info "Stopping MQTT subscriber")
-           (stop-subscriber! client)))
+(defn publish
+  "Publishes a payload string to a given MQTT topic."
+  [topic payload]
+  (try
+    (let [msg (MqttMessage. (.getBytes (if (map? payload)
+                                         (json/generate-string payload)
+                                         (str payload))
+                                       "UTF-8"))]
+      (.setQos msg 1)
+      (.publish mqtt-client topic msg)
+      (log/debug "Published MQTT message to" topic ": " payload))
+    (catch Exception e
+      (log/error e "Failed to publish MQTT message to topic:" topic))))

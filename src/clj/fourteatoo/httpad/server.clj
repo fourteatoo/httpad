@@ -209,10 +209,16 @@
       (wrap-resource "public")
       (wrap-content-type)))
 
+(defn start-server []
+  (let [port (c/port)]
+    (log/info "Starting API server on port" port)
+    (http/run-server handler {:port port :ip "0.0.0.0"})))
+
+(defn stop-server [server]
+  (when server
+    (log/info "Shutting down API")
+    (server :timeout 100)))
+
 (defstate http-server
-  :start (let [port (c/port)]
-           (log/info "Starting API server on port" port)
-           (http/run-server handler {:port port :ip "0.0.0.0"}))
-  :stop  (when http-server
-           (log/info "Shutting down API")
-           (http-server :timeout 100)))
+  :start (start-server)
+  :stop  (stop-server http-server))

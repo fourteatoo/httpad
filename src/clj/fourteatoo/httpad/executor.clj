@@ -28,7 +28,7 @@
 
 (defmethod execute-command :mqtt
   [{:keys [topic message]}]
-  (mqtt/publish! mqtt/mqtt-subscriber topic (or message "")))
+  (mqtt/publish topic (or message "")))
 
 (defmethod execute-command :shell
   [{:keys [command]}]

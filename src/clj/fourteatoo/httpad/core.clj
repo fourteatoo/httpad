@@ -6,8 +6,9 @@
    [fourteatoo.httpad.config :as c :refer [opt conf]]
    [fourteatoo.httpad.log :as log]
    [fourteatoo.httpad.network :as network]
-   [fourteatoo.httpad.server]
-   [mount.core :as mount]
+   [fourteatoo.httpad.server :as server]
+   [fourteatoo.httpad.mqtt :as mqtt]
+   [mount.core :as mount :refer [defstate]]
    [fourteatoo.httpad.rt :as rt]))
 
 
@@ -35,6 +36,14 @@
   (println summary)
   (System/exit 1))
 
+;; NOTE: if namespaces are completely self-contained, we may miss to
+;; include them, and even if we do require them, cljr may later remove
+;; the dependency. As a consequence, mount will miss the dependency
+;; and skip to start the states defined in those namespace.  The
+;; solution is either use at least a function defined in the other
+;; namespace, or move the state here altogether.  Thus the seemingly
+;; useless logs below.
+
 (defn start-program [options]
   (binding [c/options options]
     (log/info "Starting HTTPAD")
@@ -44,6 +53,9 @@
     (println "HTTPAD running\ntype C-c to stop the program")
     (when (opt :launch-ui)
       (browser/open-browser (str "http://localhost:" (c/port) "/index.html")))
+    ;; WARNING: don't remove these logs!
+    (log/info (str mqtt/mqtt-client))
+    (log/info (str server/http-server))
     (deref rt/exit?)))
 
 (defn -main [& args]
