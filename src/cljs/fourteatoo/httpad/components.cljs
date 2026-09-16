@@ -118,15 +118,19 @@
 
 (defn resolve-status
   "Finds the applicable status keyword by checking metric-val 
-   against sorted thresholds in the levels map."
+   against descending thresholds in the levels map (e.g., {:ok 0 :warning 75 :critical 90})."
   [metric-val levels]
-  (if (number? metric-val)
-    (let [thresholds (sort-by key > (or levels {0 :ok}))]
-      (some (fn [[limit status-key]]
-              (when (>= metric-val limit)
-                status-key))
-            thresholds))
+  (if (and (number? metric-val) (seq levels))
+    (let [sorted-levels (sort-by val > levels)]
+      (or (some (fn [[status-key limit]]
+                  (when (>= metric-val limit)
+                    status-key))
+                sorted-levels)
+          :ok))
     :ok))
+
+(comment
+  (resolve-status 100 {:ok 0 :warning 75 :critical 100 :max 2000}))
 
 (defmethod render-element :bar
   [section-id {:keys [title metric-key levels unit] :or {unit "%"} :as item}]

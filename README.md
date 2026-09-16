@@ -61,7 +61,9 @@ The following is an example (and just an example):
  :mqtt {:host "myserver"
         :port 1883
         :topics {"shellies/shellyswitch25-123456789098/temperature" :bathroom-temperature
-                 "tele/home/wms03/SENSOR" {[:ENERGY :Power] :washing-machine}}}
+                 "tele/home/wms03/SENSOR" {[:ENERGY :Power] :washing-machine-power}
+                 "stat/home/wms03/POWER" :washing-machine-state
+                 "tele/home/wms03/STATE" {[:POWER] :washing-machine-state}}}
  :sections [{:id :system
              :title "System Control"
              :buttons [{:id :power-menu
@@ -125,7 +127,7 @@ The following is an example (and just an example):
                         :type :bar
                         :title "CPU LOAD"
                         :metric-key :cpu-load
-                        :levels {0 :ok 75 :warning 90 :critical}}
+                        :levels {:ok 0 :warning 75 :critical 90 :max 100}}
                        {:id :bathroom-stat
                         :type :metric
                         :unit "C"
@@ -135,8 +137,14 @@ The following is an example (and just an example):
                         :type :gauge
                         :unit "W"
                         :title "Washing machine"
-                        :metric-key :washing-machine
-                        :levels {0 :ok 300 :warning 1000 :critical}}]}
+                        :metric-key :washing-machine-power
+                        :cmd {:type :mqtt
+                              :topic "cmnd/home/wms03/POWER"
+                              :message "toggle"}
+                        :state {:key :washing-machine-state
+                                :mapping {"ON" :on
+                                          "OFF" :off}}
+                        :levels {:ok 0 :warning 300 :critical 1000 :max 2000}}]}
             {:id :gimp
              :title "GIMP Tools"
              :window-class "Gimp"
