@@ -191,6 +191,8 @@ Swiping to the left you can see the next section.
 
 <img src="doc/15971.png" width="300" alt="home automation">
 
+(yes, it is that hot inside the Shelly case)
+
 and the next
 
 <img src="doc/15972.png" width="300" alt="Gimp">
