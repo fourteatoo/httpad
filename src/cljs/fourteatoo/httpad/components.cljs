@@ -73,6 +73,13 @@
      
      content]))
 
+(defn- get-telemetry [path]
+  (get-in @state/state
+          (concat [:telemetry]
+                  (if (vector? path)
+                    path
+                    [path]))))
+
 (defmulti render-element (fn [section-id item] (or (:type item) :button)))
 
 (defmethod render-element :button
@@ -100,9 +107,9 @@
          [:p {:class "text-[10px] sm:text-xs text-slate-400 mt-0.5 line-clamp-1"} desc])]]]))
 
 (defmethod render-element :metric
-  [section-id {:keys [title metric-key unit] :or {unit ""} :as item}]
+  [section-id {:keys [title metric-path unit] :or {unit ""} :as item}]
   (let [zoom-id       (get-in @state/state [:layout :zoom-level] :medium)
-        metric-val   (get-in @state/state [:telemetry metric-key])
+        metric-val   (get-telemetry metric-path)
         formatted-val (if (number? metric-val) (str metric-val unit) "--")
         val-size     (case zoom-id
                        :small       "text-lg"
@@ -129,21 +136,19 @@
           :ok))
     :ok))
 
-(comment
-  (resolve-status 100 {:ok 0 :warning 75 :critical 100 :max 2000}))
-
 (defmethod render-element :bar
-  [section-id {:keys [title metric-key levels unit] :or {unit "%"} :as item}]
+  [section-id {:keys [title metric-path levels unit] :or {unit "%"} :as item}]
   (let [zoom-id        (get-in @state/state [:layout :zoom-level] :medium)
-        metric-val     (get-in @state/state [:telemetry metric-key])
+        metric-val     (get-telemetry metric-path)
         current-val    (or metric-val 0)
         current-status (resolve-status current-val levels)
         formatted-val  (if (number? metric-val)
                          (str metric-val unit)
                          "--")
-        max-threshold  (if (seq levels)
-                         (apply max (keys levels))
-                         100)
+        max-threshold  (or (:max item)
+                           (when (seq levels)
+                             (apply max (vals levels)))
+                           100)
         pct-fill       (if (number? metric-val)
                          (min 100 (max 0 (* (/ current-val max-threshold) 100)))
                          0)
@@ -221,8 +226,8 @@
      formatted-val]]])
 
 (defmethod render-element :gauge
-  [section-id {:keys [title metric-key levels unit] :or {unit "%"} :as item}]
-  (let [metric-val     (get-in @state/state [:telemetry metric-key])
+  [section-id {:keys [title metric-path levels unit] :or {unit "%"} :as item}]
+  (let [metric-val     (get-telemetry metric-path)
         current-val    (or metric-val 0)
         current-status (resolve-status current-val levels)
         
