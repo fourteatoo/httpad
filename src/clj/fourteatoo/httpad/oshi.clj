@@ -1,27 +1,34 @@
 (ns fourteatoo.httpad.oshi
-  (:import [oshi SystemInfo]))
+  (:import [oshi SystemInfo])
+  (:require [mount.core :as mount :refer [defstate]]))
 
-;; Cache the singleton reference
-(defonce ^:private system-info (SystemInfo.))
-(defonce ^:private hal (.getHardware system-info))
-(defonce ^:private os (.getOperatingSystem system-info))
+
+(defonce system-info
+   (delay (SystemInfo.)))
+
+(defn hal []
+  (.getHardware @system-info))
+
+(defn os []
+  (.getOperatingSystem @system-info))
+
 
 (defn cpu-temperature
   "Returns current CPU temperature in °C."
   []
-  (-> hal .getSensors .getCpuTemperature))
+  (-> (hal) .getSensors .getCpuTemperature))
 
 (defn cpu-load
   "Returns global CPU load percentage over a specified sampling period in ms.
    Defaults to 1000ms."
   ([] (cpu-load 1000))
   ([sample-ms]
-   (* (-> hal .getProcessor (.getSystemCpuLoad sample-ms)) 100.0)))
+   (* (-> (hal) .getProcessor (.getSystemCpuLoad sample-ms)) 100.0)))
 
 (defn memory-stats
   "Returns memory usage stats as a map in Megabytes."
   []
-  (let [mem (.getMemory hal)
+  (let [mem (.getMemory (hal))
         total (.getTotal mem)
         avail (.getAvailable mem)
         bytes->mb #(double (/ % 1024 1024))]
@@ -36,12 +43,12 @@
   {:cpu {:temp-c (cpu-temperature)
          :load-pct (cpu-load 500)}
    :memory (memory-stats)
-   :os (str os)})
+   :os (str (os))})
 
 (defn filesystem-stats
   "Returns volume information, ignoring restricted virtual mounts."
   []
-  (let [fs (.getFileSystem os)]
+  (let [fs (.getFileSystem (os))]
     (keep (fn [store]
             (try
               (let [total (.getTotalSpace store)
