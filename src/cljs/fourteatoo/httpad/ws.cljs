@@ -56,6 +56,9 @@
     :telemetry
     (swap! state/state update :telemetry deep-merge (:metrics msg))
     
+    :server
+    (swap! state/state assoc :server-url (:url msg))
+    
     :active-section
     (when (some #(= (keyword (:id %))
                     (:section msg))

@@ -16,7 +16,8 @@
             [fourteatoo.httpad.telemetry :as telemetry]
             [clojure.edn :as edn]
             [clojure.string :as s]
-            [fourteatoo.httpad.focus :as focus])
+            [fourteatoo.httpad.focus :as focus]
+            [fourteatoo.httpad.network :as network])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]))
 
 
@@ -118,16 +119,19 @@
          (fn [ch]
            (log/info "Authenticated WebSocket connected from IP:" (:remote-addr req))
            (let [client-async-chan (a/chan (a/sliding-buffer 10))]
-             
              ;; Register handles tapping the mult, updating active state, & pushing initial snapshot
              (telemetry/register-client ch client-async-chan)
-             
              (a/go-loop []
                (if-let [msg (a/<! client-async-chan)]
                  (do
                    (http/send! ch (encode-transit msg))
                    (recur))
-                 (log/debug "Client async loop terminated")))))
+                 (log/debug "Client async loop terminated")))
+             (a/put! client-async-chan
+                     {:type :server
+                      :url (str "http://" (network/get-ip-address)
+                                ":" (or (c/conf :port) 8080)
+                                "/index.html")})))
 
          :on-receive
          (fn [_ch raw-msg]
