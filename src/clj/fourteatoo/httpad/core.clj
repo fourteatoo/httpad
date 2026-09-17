@@ -58,6 +58,9 @@
     (log/info (str server/http-server))
     (deref rt/exit?)))
 
+(comment
+  (mount/stop))
+
 (defn -main [& args]
   (let [{:keys [options summary errors]} (parse-opts args cli-options)]
     (cond errors (usage summary errors)
@@ -65,5 +68,3 @@
           :else (start-program options))))
 
 
-(comment
-  (mount/stop))
