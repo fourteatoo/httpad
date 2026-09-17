@@ -130,7 +130,7 @@
              (a/put! client-async-chan
                      {:type :server
                       :url (str "http://" (network/get-ip-address)
-                                ":" (or (c/conf :port) 8080)
+                                ":" (c/port)
                                 "/index.html")})))
 
          :on-receive
