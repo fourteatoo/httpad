@@ -545,44 +545,60 @@
         (let [target-left (* idx (.-clientWidth main-el))]
           (.scrollTo main-el #js {:left target-left :behavior "smooth"}))))))
 
+
 (defn dashboard []
   (let [main-el-atom (atom nil)
-        
-        handle-scroll
-        (fn [e]
-          (let [target      (.-target e)
-                scroll-left (.-scrollLeft target)
-                width       (.-clientWidth target)]
-            (when (> width 0)
-              (let [idx      (js/Math.round (/ scroll-left width))
-                    sections (:sections @state/state)
-                    sec      (nth sections idx nil)]
-                (when-let [sec-id (some-> sec :id keyword)]
-                  (when-not (= sec-id (:active-tab @state/state))
-                    (swap! state/state assoc :active-tab sec-id)))))))
+        prev-tab-atom (atom nil)
+        handle-scroll (fn [e]
+                        (let [target      (.-target e)
+                              scroll-left (.-scrollLeft target)
+                              width       (.-clientWidth target)]
+                          (when (> width 0)
+                            (let [idx      (js/Math.round (/ scroll-left width))
+                                  sections (:sections @state/state)
+                                  sec      (nth sections idx nil)]
+                              (when-let [sec-id (some-> sec :id keyword)]
+                                (when-not (= sec-id (:active-tab @state/state))
+                                  (reset! prev-tab-atom sec-id) ; Prevent feedback loop when user manually scrolls
+                                  (swap! state/state assoc :active-tab sec-id)))))))
 
-        handle-tab-click
-        (fn [tab-id sections]
-          (swap! state/state assoc :active-tab tab-id)
-          (scroll-to-tab! @main-el-atom tab-id sections))
+        handle-tab-click (fn [tab-id sections]
+                           (reset! prev-tab-atom tab-id)
+                           (swap! state/state assoc :active-tab tab-id)
+                           (scroll-to-tab! @main-el-atom tab-id sections))
 
-        handle-keydown
-        (fn [e]
-          (case (.-key e)
-            "ArrowLeft"  (do (.preventDefault e) 
-                             (cycle-tab! :left)
-                             (scroll-to-tab! @main-el-atom (:active-tab @state/state) (:sections @state/state)))
-            "ArrowRight" (do (.preventDefault e) 
-                             (cycle-tab! :right)
-                             (scroll-to-tab! @main-el-atom (:active-tab @state/state) (:sections @state/state)))
-            nil))]
-
+        handle-keydown (fn [e]
+                         (case (.-key e)
+                           "ArrowLeft"  (do (.preventDefault e) 
+                                            (cycle-tab! :left)
+                                            (scroll-to-tab! @main-el-atom (:active-tab @state/state) (:sections @state/state)))
+                           "ArrowRight" (do (.preventDefault e) 
+                                            (cycle-tab! :right)
+                                            (scroll-to-tab! @main-el-atom (:active-tab @state/state) (:sections @state/state)))
+                           nil))]
     (r/create-class
      {:displayName "Dashboard"
 
       :component-did-mount
       (fn [_]
-        (js/window.addEventListener "keydown" handle-keydown))
+        (js/window.addEventListener "keydown" handle-keydown)
+        ;; Initial scroll on mount if active-tab is already set
+        (let [sections   (:sections @state/state)
+              active-tab (:active-tab @state/state)]
+          (when active-tab
+            (reset! prev-tab-atom active-tab)
+            (scroll-to-tab! @main-el-atom active-tab sections))))
+
+      :component-did-update
+      (fn [this]
+        ;; Triggers whenever state/state changes and Reagent re-renders
+        (let [sections   (:sections @state/state)
+              active-tab (or (:active-tab @state/state)
+                             (some-> (first sections) :id keyword))]
+          ;; If active-tab changed externally (e.g. WebSocket focus change), scroll main container
+          (when (and active-tab (not= active-tab @prev-tab-atom))
+            (reset! prev-tab-atom active-tab)
+            (scroll-to-tab! @main-el-atom active-tab sections))))
 
       :component-will-unmount
       (fn [_]
@@ -596,7 +612,6 @@
           [:div {:class "h-[100dvh] flex flex-col justify-between bg-slate-950 text-slate-100 p-4 pb-6 overflow-hidden"}
            [header-component]
            [tab-header sections active-id #(handle-tab-click % sections)]
-
            [:main {:ref #(reset! main-el-atom %)
                    :on-scroll handle-scroll
                    :class "flex-1 min-h-0 w-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar overflow-y-hidden"}
@@ -605,63 +620,4 @@
               ^{:key (str sec-id)}
               [:div {:class "w-full min-w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden overscroll-y-contain no-scrollbar"}
                [section-view sec]])]
-
-           [section-dots sections active-id]]))})))
-
-#_
-(defn dashboard []
-  (let [main-ref (atom nil)
-        prev-tab (atom nil)]
-    (r/create-class
-     {:displayName "Dashboard"
-
-      :component-did-mount
-      (fn [_]
-        (reset! prev-tab (:active-tab @state/state))
-        (when-let [el @main-ref]
-          (.addEventListener el "scrollend"
-            (fn [_]
-              (let [scroll-left (.-scrollLeft el)
-                    width       (.-clientWidth el)]
-                (when (> width 0)
-                  (let [idx      (js/Math.round (/ scroll-left width))
-                        sections (:sections @state/state)
-                        sec      (nth sections idx nil)]
-                    (when-let [sec-id (some-> sec :id keyword)]
-                      (when-not (= sec-id (:active-tab @state/state))
-                        (reset! prev-tab sec-id)
-                        (swap! state/state assoc :active-tab sec-id))))))))))
-
-      :component-did-update
-      (fn [_]
-        (let [sections    (:sections @state/state)
-              current-tab (:active-tab @state/state)]
-          (when (and current-tab (not= current-tab @prev-tab))
-            (reset! prev-tab current-tab)
-            (let [sec-ids (mapv #(keyword (:id %)) sections)
-                  idx     (.indexOf sec-ids current-tab)]
-              (when (and (>= idx 0) @main-ref)
-                (let [target-left (* idx (.-clientWidth @main-ref))]
-                  (.scrollTo @main-ref #js {:left target-left :behavior "smooth"})))))))
-
-      :reagent-render
-      (fn []
-        (let [sections  (:sections @state/state)
-              active-id (or (:active-tab @state/state)
-                            (some-> (first sections) :id keyword))]
-          ;; Lock total root view to exactly viewport height
-          [:div {:class "h-[100dvh] flex flex-col justify-between bg-slate-950 text-slate-100 p-4 pb-6 overflow-hidden"}
-           [header-component]
-           [tab-header sections active-id #(swap! state/state assoc :active-tab %)]
-
-           ;; Horizontal snap container (takes all remaining height, zero flex-shrink)
-           [:main {:ref #(reset! main-ref %)
-                   :class "flex-1 min-h-0 w-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar overflow-y-hidden"}
-            (for [sec sections
-                  :let [sec-id (keyword (:id sec))]]
-              ^{:key (str sec-id)}
-              [:div {:class "w-full min-w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden overscroll-y-contain no-scrollbar"}
-               [section-view sec]])]
-
-           ;; Fixed at the bottom of the screen
            [section-dots sections active-id]]))})))
