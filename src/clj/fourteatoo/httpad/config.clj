@@ -1,6 +1,7 @@
 (ns fourteatoo.httpad.config
   (:require [cprop.core :refer [load-config]]
-            [mount.core :refer [defstate]]))
+            [mount.core :refer [defstate]]
+            [mount.core :as mount]))
 
 (defn- user-home []
   (System/getProperty "user.home"))
@@ -27,24 +28,17 @@
             sections)
        (into {})))
 
-;; should be rebound with the CLI options in the main function
-(def ^:dynamic options {})
-
 (defstate config
   :start (let [override-file (str (user-home) "/.httpad")
-               cfg (load-config
-                    :resource "config.edn"
-                    :file override-file)]
-           (assoc cfg :action-index (extract-action-index (:sections cfg)))))
+               cfg (load-config :resource "config.edn"
+                                :file override-file
+                                :merge [(or (mount/args) {})])]
+           (assoc cfg :action-index
+                  (extract-action-index (:sections cfg)))))
 
 (defn conf [& args]
   (get-in config args))
 
-(defn opt [& args]
-  (get-in options args))
-
 (defn port []
-  (or (opt :port)
-      (conf :port)
+  (or (conf :port)
       8080))
-

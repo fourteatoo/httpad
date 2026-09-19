@@ -3,7 +3,7 @@
   (:require
    [clojure.tools.cli :refer [parse-opts]]
    [fourteatoo.httpad.browser :as browser]
-   [fourteatoo.httpad.config :as c :refer [opt conf]]
+   [fourteatoo.httpad.config :as c :refer [conf]]
    [fourteatoo.httpad.log :as log]
    [fourteatoo.httpad.network :as network]
    [fourteatoo.httpad.server :as server]
@@ -46,18 +46,18 @@
 ;; useless logs below.
 
 (defn start-program [options]
-  (binding [c/options options]
-    (log/info "Starting HTTPAD")
-    (rt/arm-exit-hooks)
-    (log/info (mount/start))
-    (print-ui-urls (c/port))
-    (println "\nHTTPAD running\ntype C-c to stop it")
-    (when (opt :launch-ui)
-      (browser/open-browser (str "http://localhost:" (c/port) "/index.html")))
-    ;; WARNING: don't remove these logs!
-    (log/info (str mqtt/mqtt-client))
-    (log/info (str server/http-server))
-    (deref rt/exit?)))
+  (log/info "Starting HTTPAD")
+  (rt/arm-exit-hooks)
+  (mount/with-args options)
+  (log/info (mount/start))
+  (print-ui-urls (c/port))
+  (println "\nHTTPAD running\ntype C-c to stop it")
+  (when (conf :launch-ui)
+    (browser/open-browser (str "http://localhost:" (c/port) "/index.html")))
+  ;; WARNING: don't remove these logs!
+  (log/info (str mqtt/mqtt-client))
+  (log/info (str server/http-server))
+  (deref rt/exit?))
 
 (comment
   (mount/stop))
