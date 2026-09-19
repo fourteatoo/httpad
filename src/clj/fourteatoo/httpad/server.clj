@@ -108,6 +108,15 @@
       (make-response (sanitize-config c/config))
       (make-response {:status "error" :message "Unauthorized"} 401))))
 
+(defn user-interface-url [& {:keys [host port]}]
+  (str "http://" (or host
+                     (network/get-ip-address)
+                     "localhost")
+       ":" (or port
+               (c/port)
+               8080)
+       "/index.html"))
+
 (defn ws-handler
   "Validates session cookie before upgrading HTTP to WebSocket channel,
    deserializing incoming Transit messages."
@@ -129,9 +138,7 @@
                  (log/debug "Client async loop terminated")))
              (a/put! client-async-chan
                      {:type :server
-                      :url (str "http://" (network/get-ip-address)
-                                ":" (c/port)
-                                "/index.html")})))
+                      :url (user-interface-url)})))
 
          :on-receive
          (fn [_ch raw-msg]

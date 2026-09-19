@@ -24,12 +24,10 @@
    ["-h" "--help" "Show this"]])
 
 (defn print-ui-urls [port]
-  (let [make-url (fn [host]
-                   (str "http://" host ":" port "/index.html"))
-        lan-url (make-url (network/get-ip-address))]
+  (let [lan-url (server/user-interface-url)]
     (qr/print-small-qr lan-url)
-    (println (str "URL: " lan-url))
-    (println (str "  or " (make-url "localhost")))))
+    (println (str "UI at " lan-url))
+    (println (str "   or " (server/user-interface-url :host "localhost")))))
 
 (defn usage [summary errors]
   (run! println errors)
