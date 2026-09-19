@@ -148,27 +148,27 @@ The following is an example (and just an example):
             {:id :gimp
              :title "GIMP Tools"
              :window-class "Gimp"
-             :buttons [{:id "tool-brush"
+             :buttons [{:id :tool-brush
                         :title "Brush"
                         :icon "🖌️"
                         :cmd "xdotool key p"}
-                       {:id "tool-eraser"
+                       {:id :tool-eraser
                         :title "Eraser"
                         :icon "🧹"
                         :cmd "xdotool key Shift+E"}
-                       {:id "tool-select"
+                       {:id :tool-select
                         :title "Wand"
                         :icon "🪄"
                         :cmd "xdotool key u"}
-                       {:id "view-fit"
+                       {:id :view-fit
                         :title "Fit Screen"
                         :icon "🖼️"
                         :cmd "xdotool key Ctrl+Shift+J"}
-                       {:id "view-tab"
+                       {:id :view-tab
                         :title "Toggle UI"
                         :icon "👁️"
                         :cmd "xdotool key Tab"}
-                       {:id "select-none"
+                       {:id :select-none
                         :title "Deselect"
                         :icon "❌"
                         :cmd "xdotool key Ctrl+Shift+A"}]}]}
