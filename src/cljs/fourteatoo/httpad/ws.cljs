@@ -187,3 +187,19 @@
 
 (comment
   (logout!))
+
+(defn fetch-pair-token! [qr-url-atom loading-atom]
+  (reset! loading-atom true)
+  (-> (js/fetch "/api/int/pair-token"
+                #js {:method "POST"
+                     :headers #js {"Accept" "application/transit+json"
+                                   "Content-Type" "application/transit+json"}})
+      parse-transit
+      (.then (fn [data]
+               ;; data is decoded transit: {:token "..." :url "..."}
+               (reset! loading-atom false)
+               (reset! qr-url-atom (:url data))))
+      (.catch (fn [err]
+                (js/console.error "Failed to fetch pair token:" err)
+                (reset! loading-atom false)
+                (reset! qr-url-atom nil)))))
