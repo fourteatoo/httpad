@@ -1,6 +1,7 @@
 (ns fourteatoo.httpad.server
   (:require [mount.core :refer [defstate]]
             [org.httpkit.server :as http]
+            [reitit.ring :as ring]
             [ring.util.response :as resp]
             [ring.middleware.resource :refer [wrap-resource]]
             [ring.middleware.content-type :refer [wrap-content-type]]
@@ -79,9 +80,7 @@
 (defn auth-status-handler
   "Returns current authentication state based on request cookie."
   [req]
-  (let [session-id (get-cookie req "macropad_session")
-        valid? (and (seq session-id) (contains? @active-sessions session-id))]
-    (make-response {:authenticated? valid?})))
+  (make-response {:authenticated? (valid-session? req)}))
 
 (defn- sanitize-button
   [b]
@@ -103,68 +102,79 @@
 (defn config-handler
   "Returns frontend layout configuration (sanitized of backend commands)."
   [req]
-  (let [session-id (get-cookie req "macropad_session")]
-    (if (and (seq session-id) (contains? @active-sessions session-id))
-      (make-response (sanitize-config c/config))
-      (make-response {:status "error" :message "Unauthorized"} 401))))
+  (make-response (sanitize-config c/config)))
 
-(defn user-interface-url [& {:keys [host port]}]
+(defn user-interface-url [& {:keys [host port token]}]
   (str "http://" (or host
                      (network/get-ip-address)
                      "localhost")
        ":" (or port
                (c/port)
                8080)
-       "/index.html"))
+       "/"                              ; "index.html"
+       (when token
+         (str "?token=" (if (string? token)
+                          token
+                          (auth/generate-pair-token))))))
+
+(defn- pair-token-handler [req]
+  (let [token (get-in req [:params :token])]
+    (if (auth/consume-pair-token token)
+      (let [session-id (str (random-uuid))]
+        (swap! active-sessions conj session-id)
+        (log/info "Device authenticated successfully via QR pair-token from IP:" (:remote-addr req))
+        (-> (resp/redirect "/")
+            (assoc-in [:cookies "httpad_session"]
+                      {:value     session-id
+                       :path      "/"
+                       :http-only true
+                       :same-site :lax
+                       :max-age   31536000})))
+      {:status 401 :body "Invalid or expired pair token"})))
 
 (defn ws-handler
   "Validates session cookie before upgrading HTTP to WebSocket channel,
    deserializing incoming Transit messages."
   [req]
-  (let [session-id (get-cookie req "macropad_session")]
-    (if (and (seq session-id) (contains? @active-sessions session-id))
-      (http/as-channel req
-        {:on-open
-         (fn [ch]
-           (log/info "Authenticated WebSocket connected from IP:" (:remote-addr req))
-           (let [client-async-chan (a/chan (a/sliding-buffer 10))]
-             ;; Register handles tapping the mult, updating active state, & pushing initial snapshot
-             (telemetry/register-client ch client-async-chan)
-             (a/go-loop []
-               (if-let [msg (a/<! client-async-chan)]
-                 (do
-                   (http/send! ch (encode-transit msg))
-                   (recur))
-                 (log/debug "Client async loop terminated")))
-             (a/put! client-async-chan
-                     {:type :server
-                      :url (user-interface-url)})))
+  (http/as-channel req
+                   {:on-open
+                    (fn [ch]
+                      (log/info "Authenticated WebSocket connected from IP:" (:remote-addr req))
+                      (let [client-async-chan (a/chan (a/sliding-buffer 10))]
+                        ;; Register handles tapping the mult, updating active state, & pushing initial snapshot
+                        (telemetry/register-client ch client-async-chan)
+                        (a/go-loop []
+                          (if-let [msg (a/<! client-async-chan)]
+                            (do
+                              (http/send! ch (encode-transit msg))
+                              (recur))
+                            (log/debug "Client async loop terminated")))
+                        (a/put! client-async-chan
+                                {:type :server
+                                 :url (user-interface-url :token true)})))
 
-         :on-receive
-         (fn [_ch raw-msg]
-           (try
-             (let [payload (decode-transit raw-msg)
-                   action  (:action payload)]
-               (if action
-                 (executor/execute action)
-                 (log/warn "Received Transit WebSocket frame missing ':action' key")))
-             (catch Exception e
-               (log/error e "Failed to decode incoming Transit WebSocket frame"))))
+                    :on-receive
+                    (fn [_ch raw-msg]
+                      (try
+                        (let [payload (decode-transit raw-msg)
+                              action  (:action payload)]
+                          (if action
+                            (executor/execute action)
+                            (log/warn "Received Transit WebSocket frame missing ':action' key")))
+                        (catch Exception e
+                          (log/error e "Failed to decode incoming Transit WebSocket frame"))))
 
-         :on-close
-         (fn [ch status]
-           (log/debug "WebSocket channel closed with status:" status)
-           ;; Unregister handles untapping, channel closing, and atom removal
-           (telemetry/unregister-client ch))})
-      (do
-        (log/warn "Rejected unauthenticated WebSocket attempt from IP:" (:remote-addr req))
-        {:status 403 :body "Forbidden"}))))
+                    :on-close
+                    (fn [ch status]
+                      (log/debug "WebSocket channel closed with status:" status)
+                      ;; Unregister handles untapping, channel closing, and atom removal
+                      (telemetry/unregister-client ch))}))
 
 (defn- logout-handler [req]
   {:status 200
    :headers {"Content-Type" "application/transit+json"
              ;; Force browser to immediately drop the session cookie
-             "Set-Cookie" "macropad_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"}
+             "Set-Cookie" "httpad_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"}
    :session nil ;; Clear Ring session memory
    :body (encode-transit {:success true})})
 
@@ -199,26 +209,56 @@
                       :message "Internal error"
                       :error (str e)})})))
 
-(defn- app-routes [req]
-  (case (:uri req)
-    "/" (resp/resource-response "public/index.html")
-    "/api/login"       (if (= (:request-method req) :post)
-                         (login-handler req)
-                         {:status 451 :body "Method Not Allowed"})
-    "/api/logout" (logout-handler req)
-    "/api/auth-status" (auth-status-handler req)
-    "/api/config"      (config-handler req)
-    "/api/focus" (focus-handler req)
-    "/ws"              (ws-handler req)
-    {:status 404 :body "Not Found"}))
+(defn wrap-auth [handler]
+  (fn [req]
+    (if (valid-session? req)
+      (handler req)
+      (make-response {:status "error"
+                      :message "Unauthorized"} 401))))
+
+(defn generate-pair-token-handler
+  "Protected endpoint: Generates a new ephemeral pairing token for
+  display in a QR code."
+  [_req]
+  (let [token (auth/generate-pair-token)]
+    (make-response {:token token
+                    :url (user-interface-url :token token)})))
+
+(def app-routes
+  [;; 1. Root / Public Static Landing
+   ["/" {:get (fn [req]
+                (if (get-in req [:params :token])
+                  (pair-token-handler req)
+                  (resp/resource-response "public/index.html")))}]
+
+   ;; 2. Public API endpoints
+   ["/api"
+    ["/login" {:post login-handler}]
+    ["/focus" {:post focus-handler}]
+    ["/pair" {:get pair-token-handler}]
+
+    ;; 3. Internal Protected endpoints (Auth middleware applied ONLY to this branch)
+    ["/int" {:middleware [wrap-auth]}
+     ["/config"      {:get config-handler}]
+     ["/auth-status" {:get auth-status-handler}]
+     ["/ws"          {:get ws-handler}]
+     ["/logout"      {:post logout-handler}]
+     ["/pair-token"  {:post generate-pair-token-handler}]]]])
 
 (def handler
-  (-> app-routes
-      (wrap-keyword-params)
-      (wrap-params)
-      (wrap-cookies)
-      (wrap-resource "public")
-      (wrap-content-type)))
+  (ring/ring-handler
+    (ring/router app-routes)
+    
+    ;; Default fallbacks (404, resource serving, etc.)
+    (ring/create-default-handler
+      {:not-found (constantly {:status 404 :body "Not Found"})})
+    
+    ;; Global Ring Middleware
+    {:middleware [wrap-params
+                  wrap-keyword-params
+                  wrap-cookies
+                  [wrap-resource "public"]
+                  wrap-content-type]}))
 
 (defn start-server []
   (let [port (c/port)]

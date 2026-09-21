@@ -10,6 +10,7 @@
                  [ring/ring-codec "1.3.0"]
                  [cheshire/cheshire "6.2.0"]
                  [camel-snake-kebab "0.4.3"]
+                 [metosin/reitit-ring "0.7.2"]
                  [mount "0.1.24"]
                  [cprop "0.1.21"]
                  [diehard "0.12.1"]                 
