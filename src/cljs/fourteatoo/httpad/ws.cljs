@@ -77,7 +77,7 @@
 
   (let [host (.. js/window -location -host)
         protocol (if (= (.. js/window -location -protocol) "https:") "wss:" "ws:")
-        ws-url (str protocol "//" host "/ws")
+        ws-url (str protocol "//" host "/api/int/ws")
         ws (js/WebSocket. ws-url)]
 
     (set! (.-onopen ws)
@@ -122,7 +122,7 @@
 
 ;; --- API Handlers ---
 (defn fetch-config! []
-  (-> (js/fetch "/api/config"
+  (-> (js/fetch "/api/int/config"
                 #js {:headers #js {"Accept" "application/transit+json"}})
       parse-transit
       (.then (fn [data]
@@ -135,7 +135,7 @@
                 (swap! state/state assoc :auth-status :unauthenticated)))))
 
 (defn check-auth! []
-  (-> (js/fetch "/api/auth-status"
+  (-> (js/fetch "/api/int/auth-status"
                 #js {:headers #js {"Accept" "application/transit+json"}})
       parse-transit
       (.then (fn [data]
