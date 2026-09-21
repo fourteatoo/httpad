@@ -10,7 +10,8 @@
    [fourteatoo.httpad.mqtt :as mqtt]
    [mount.core :as mount :refer [defstate]]
    [fourteatoo.httpad.rt :as rt]
-   [fourteatoo.httpad.qr :as qr]))
+   [fourteatoo.httpad.qr :as qr]
+   [fourteatoo.httpad.auth :as auth]))
 
 
 (def cli-options
@@ -24,10 +25,13 @@
    ["-h" "--help" "Show this"]])
 
 (defn print-ui-urls [port]
-  (let [lan-url (server/user-interface-url)]
-    (qr/print-small-qr lan-url)
+  (let [token (auth/generate-pair-token)
+        lan-url (server/user-interface-url
+                 :token token)]
+    (qr/print-small-qr (str lan-url "?pair_token=" token))
     (println (str "UI at " lan-url))
-    (println (str "   or " (server/user-interface-url :host "localhost")))))
+    (println (str "   or " (server/user-interface-url :host "localhost"
+                                                      :token token)))))
 
 (defn usage [summary errors]
   (run! println errors)

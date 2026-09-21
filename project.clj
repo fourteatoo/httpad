@@ -23,6 +23,7 @@
                  ;; Tailwind CLI packed as a runnable Java jar dependency
                  [org.webjars.npm/tailwindcss "4.3.3"]
                  [org.clojure/clojurescript "1.12.145"]
+                 [clojure.java-time "1.4.3"]
                  [ring-transit "0.1.6"]
                  [com.cognitect/transit-cljs "0.8.280"]
                  [com.github.oshi/oshi-core "7.6.1"]

@@ -18,7 +18,8 @@
             [clojure.edn :as edn]
             [clojure.string :as s]
             [fourteatoo.httpad.focus :as focus]
-            [fourteatoo.httpad.network :as network])
+            [fourteatoo.httpad.network :as network]
+            [fourteatoo.httpad.auth :as auth])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]))
 
 
@@ -44,6 +45,15 @@
   "Extracts a specific cookie value from Ring request map."
   [req cookie-name]
   (get-in req [:cookies cookie-name :value]))
+
+;; Replace your existing get-cookie definition with this:
+(defn- get-session-id [req]
+  (get-cookie req "httpad_session"))
+
+(defn- valid-session? [req]
+  (let [session-id (get-session-id req)]
+    (boolean (and (seq session-id)
+                  (contains? @active-sessions session-id)))))
 
 (defn- make-response
   ([body] (make-response body 200))
