@@ -25,7 +25,7 @@
             raw)
           (catch Exception _ raw))))))
 
-(defn- process-message! [topic message topic-config out-chan]
+(defn- process-message [topic message topic-config out-chan]
   (when-let [mapping (get topic-config topic)]
     (let [payload (parse-payload message)]
       (cond
@@ -73,7 +73,7 @@
 
     (messageArrived [_ topic message]
       (try
-        (process-message! topic message topic-config out-chan)
+        (process-message topic message topic-config out-chan)
         (catch Exception e
           (log/error e "Error processing incoming MQTT payload on topic:" topic))))
 
