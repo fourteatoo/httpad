@@ -166,10 +166,9 @@
                     :on-receive
                     (fn [_ch raw-msg]
                       (try
-                        (let [payload (decode-transit raw-msg)
-                              action  (:action payload)]
-                          (if action
-                            (executor/execute action)
+                        (let [payload (decode-transit raw-msg)]
+                          (if (:action payload)
+                            (executor/execute payload)
                             (log/warn "Received Transit WebSocket frame missing ':action' key")))
                         (catch Exception e
                           (log/error e "Failed to decode incoming Transit WebSocket frame"))))

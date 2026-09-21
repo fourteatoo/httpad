@@ -1,25 +1,14 @@
 (ns fourteatoo.httpad.executor
   (:require [clojure.java.shell :refer [sh]]
+            [diehard.core :as dh]
             [fourteatoo.httpad.log :as log]
             [fourteatoo.httpad.config :refer [config]]
-            [fourteatoo.httpad.mqtt :as mqtt]))
+            [fourteatoo.httpad.mqtt :as mqtt]
+            [clojure.string :as s]))
 
-;; Tracks last execution timestamp (in ms) per button ID
-(defonce ^:private last-executed (atom {}))
-
-(defn- rate-limited?
-  "Returns true if action-id was executed within cooldown-ms window."
-  [action-id cooldown-ms]
-  (let [now (System/currentTimeMillis)
-        last-time (get @last-executed action-id 0)]
-    (if (< (- now last-time) cooldown-ms)
-      true
-      (do
-        (swap! last-executed assoc action-id now)
-        false))))
 
 (defn- lookup-command
-  "Finds the command vector in configuration matching action-id."
+  "Finds the command in configuration matching action-id."
   [action-path]
   (or (get-in config (concat [:action-index] action-path [:default]))
       (get-in config (concat [:action-index] action-path))))
@@ -27,35 +16,41 @@
 (defmulti execute-command :type)
 
 (defmethod execute-command :mqtt
-  [{:keys [topic message]}]
-  (mqtt/publish topic (or message "")))
+  [{:keys [topic message params]}]
+  (mqtt/publish topic (or message
+                          (first params)
+                          "")))
 
 (defmethod execute-command :shell
-  [{:keys [command]}]
-  (let [{:keys [exit out err]} (sh "sh" "-c" command)]
+  [{:keys [command params]}]
+  (let [{:keys [exit out err]} (sh "sh" "-c"
+                                   (cond-> command
+                                     params (str " " (s/join " " params) )))]
     (if (zero? exit)
       (when-not (clojure.string/blank? out)
         (log/debug (str "Command '" command "' stdout: " out)))
       (log/error (str "Command '" command "' failed with exit code " exit ": " err)))))
 
-(defmethod execute-command nil
+(defmethod execute-command :default
   [cmd]
-  (execute-command {:type :shell :command cmd}))
+  (throw (ex-info "unrecognised command" {:cmd cmd})))
+
+(dh/defratelimiter command-rate-limit {:rate 3})
 
 (defn execute
-  "Executes a button command asynchronously behind a rate limiter.
-   Default cooldown is 500ms per action-id."
-  ([action-id]
-   (execute action-id 400))
-  ([action-id cooldown-ms]
-   (if (rate-limited? action-id cooldown-ms)
-     (log/warn "Rate limit hit for action" action-id)
-     (if-let [cmd (lookup-command action-id)]
-       ;; Future handles non-blocking execution off the http-kit worker thread
-       (future
-         (try
-           (log/info "Executing command for" action-id ": " cmd)
-           (execute-command cmd)
-           (catch Exception e
-             (log/error e (str "Failed to dispatch command for" action-id)))))
-       (log/warn "No command configured for action-id" action-id)))))
+  "Executes a command asynchronously."
+  [action]
+  (dh/with-rate-limiter {:ratelimiter command-rate-limit}
+    (let [cmd (lookup-command (:action action))
+          cmd (if (string? cmd)
+                {:type :shell :command cmd}
+                cmd)]
+      ;; Future handles non-blocking execution
+      (if cmd
+        (future
+          (try
+            (log/info "Executing command for" action ": " cmd)
+            (execute-command (cond-> cmd (:params action) (assoc :params (:params action))))
+            (catch Exception e
+              (log/error e (str "Failed to dispatch command for" action)))))
+        (log/warn "No command configured for action-id" action)))))
