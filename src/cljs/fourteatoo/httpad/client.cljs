@@ -3,7 +3,7 @@
             [reagent.dom.client :as rdom]
             [cognitect.transit :as t]
             [fourteatoo.httpad.state :as state]
-            [fourteatoo.httpad.components :as components]
+            [fourteatoo.httpad.ui.dashboard :as dash]
             [fourteatoo.httpad.ws :as ws]))
 
 (defn main-ui []
@@ -13,10 +13,10 @@
      "Validating session..."]
 
     :unauthenticated
-    [components/login-screen]
+    [dash/login-screen]
 
     :authenticated
-    [components/dashboard]))
+    [dash/dashboard]))
 
 (defonce root-ref (atom nil))
 

@@ -113,11 +113,13 @@
 
     (reset! ws-conn ws)))
 
-(defn send-action! [cmd-path]
+(defn send-action! [cmd-path & [params]]
   (util/haptic!)
   (when-let [ws @ws-conn]
     (if (= (.-readyState ws) js/WebSocket.OPEN)
-      (.send ws (encode-transit {:action cmd-path}))
+      (let [data {:action cmd-path}]
+        (.send ws (encode-transit (cond-> {:action cmd-path}
+                                    params (assoc :params params)))))
       (js/console.warn "WebSocket not open. Action dropped:" cmd-path))))
 
 ;; --- API Handlers ---
