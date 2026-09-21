@@ -124,13 +124,17 @@
 (defn publish
   "Publishes a payload string to a given MQTT topic."
   [topic payload]
-  (try
-    (let [msg (MqttMessage. (.getBytes (if (map? payload)
-                                         (json/generate-string payload)
-                                         (str payload))
-                                       "UTF-8"))]
-      (.setQos msg 1)
-      (.publish mqtt-client topic msg)
-      (log/debug "Published MQTT message to" topic ": " payload))
-    (catch Exception e
-      (log/error e "Failed to publish MQTT message to topic:" topic))))
+  (if mqtt-client
+    (try
+      (let [msg (MqttMessage. (.getBytes (if (map? payload)
+                                           (json/generate-string payload)
+                                           (str payload))
+                                         "UTF-8"))]
+        (.setQos msg 1)
+        (.publish mqtt-client topic msg)
+        (log/debug "Published MQTT message to" topic ": " payload))
+      (catch Exception e
+        (log/error e "Failed to publish MQTT message to topic:" topic)))
+    (throw
+     (ex-info "cannot publish without an MQTT connection"
+              {:topic topic :payload payload}))))
