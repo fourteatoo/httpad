@@ -74,7 +74,7 @@
           (swap! active-sessions conj session-id)
           (log/info "Successful authentication from IP" (:remote-addr req))
           (assoc-in (make-response {:status "ok"})
-                    [:cookies "macropad_session"]
+                    [:cookies "httpad_session"]
                     {:value session-id
                      :path "/"
                      :http-only true
