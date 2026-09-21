@@ -13,7 +13,8 @@
             MqttMessage]
            [org.eclipse.paho.client.mqttv3.persist MemoryPersistence]))
 
-(defn- parse-payload [^MqttMessage message]
+
+(defn- parse-payload [message]
   (let [raw (str/trim (String. (.getPayload message) "UTF-8"))]
     (try
       (json/parse-string raw true)
