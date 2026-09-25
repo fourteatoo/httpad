@@ -22,7 +22,7 @@ some dumb colour show, assuming the macropad offers RGB backlighting.
 Sure, Emacs users may not see the point in such investement (Emacs =
 Editor MACroS), but Gimp, Lightroom or most DAW users know the pain.
 
-HTTPAD compromises on the tectile experience to offer a better visual
+HTTPAD compromises on the tactile experience to offer a better visual
 one.  Not to mention, cheaper.
 
 This app strives to imitate such macropads on a mobile device you
