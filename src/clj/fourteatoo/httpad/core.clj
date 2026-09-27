@@ -28,7 +28,7 @@
   (let [token (auth/generate-pair-token)
         lan-url (server/user-interface-url
                  :token token)]
-    (qr/print-small-qr (str lan-url "?pair_token=" token))
+    (qr/print-small-qr lan-url)
     (println (str "UI at " lan-url))
     (println (str "   or " (server/user-interface-url :host "localhost"
                                                       :token token)))))
