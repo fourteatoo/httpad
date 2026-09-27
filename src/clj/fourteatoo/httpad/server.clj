@@ -233,20 +233,20 @@
                     :url (user-interface-url :token token)})))
 
 (def app-routes
-  [;; 1. Root / Public Static Landing
+  [;; default page
    ["/" {:get (fn [req]
                 (if (get-in req [:params :token])
                   (pair-token-handler req)
                   (-> (resp/resource-response "public/index.html")
                       (resp/content-type "text/html; charset=utf-8"))))}]
 
-   ;; 2. Public API endpoints
+   ;; public API endpoints
    ["/api"
     ["/login" {:post login-handler}]
     ["/focus" {:post focus-handler}]
     ["/pair" {:get pair-token-handler}]
 
-    ;; 3. Internal Protected endpoints (Auth middleware applied ONLY to this branch)
+    ;; protected endpoints
     ["/int" {:middleware [wrap-auth]}
      ["/config"      {:get config-handler}]
      ["/auth-status" {:get auth-status-handler}]
@@ -257,12 +257,8 @@
 (def handler
   (ring/ring-handler
     (ring/router app-routes)
-    
-    ;; Default fallbacks (404, resource serving, etc.)
     (ring/create-default-handler
       {:not-found (constantly {:status 404 :body "Not Found"})})
-    
-    ;; Global Ring Middleware
     {:middleware [wrap-params
                   wrap-keyword-params
                   wrap-cookies
