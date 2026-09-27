@@ -238,7 +238,8 @@
    ["/" {:get (fn [req]
                 (if (get-in req [:params :token])
                   (pair-token-handler req)
-                  (resp/resource-response "public/index.html")))}]
+                  (-> (resp/resource-response "public/index.html")
+                      (resp/content-type "text/html; charset=utf-8"))))}]
 
    ;; 2. Public API endpoints
    ["/api"
