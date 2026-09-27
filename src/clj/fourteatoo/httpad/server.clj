@@ -46,7 +46,6 @@
   [req cookie-name]
   (get-in req [:cookies cookie-name :value]))
 
-;; Replace your existing get-cookie definition with this:
 (defn- get-session-id [req]
   (get-cookie req "httpad_session"))
 
